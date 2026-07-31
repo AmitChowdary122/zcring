@@ -117,6 +117,7 @@ anything that will appear in the abstract or slides:
 ```bash
 # close browsers, IDEs, Docker, everything
 sudo cpupower frequency-set -g performance     # stop frequency scaling
+sudo cpupower idle-set -D 0                    # stop deep C-state entry — see below
 ./build/bench --transport=zcring --size=4096 --touch \
               --count=200000 --gap-us=100 --cpu-prod=2 --cpu-cons=3
 ```
@@ -128,6 +129,54 @@ Pinning producer and consumer to distinct physical cores (`--cpu-prod` /
 `--cpu-cons`) is the cross-core case, which is the honest default for real
 workloads. Pinning both to sibling hyperthreads of the same core will flatter
 zcring considerably — if you show that, label it.
+
+### 4a. Deep C-states are a tail-latency source, not just background noise
+
+Confirmed on the dev machine 2026-08-01. Idle states and their exit
+latencies (`cat /sys/devices/system/cpu/cpu*/cpuidle/state*/{name,latency}`):
+
+| state | name | exit latency |
+|---|---|---|
+| state0 | POLL | 0 µs |
+| state1 | C1_ACPI | 1 µs |
+| state2 | C2_ACPI | 253 µs |
+| state3 | C3_ACPI | 1048 µs |
+
+A consumer that spins with `--yield` at a 100 µs gap is idle enough between
+messages that the cpuidle governor sometimes predicts a long sleep and picks
+C3. Waking from C3 costs up to 1048 µs, and that cost lands directly in the
+tail. Measured effect at 64 B, N=1, 5 reps of 50000 messages each:
+
+| | p99.9 mean | p99.9 range |
+|---|---|---|
+| C-states enabled | 354 µs | 787 ns – 1.77 ms |
+| `cpupower idle-set -D 0` | **2.4 µs** | 1.4 µs – 4.2 µs |
+
+The improvement is not just the mean dropping — the *variance collapses*.
+Before, p99.9 depended on whether the governor happened to guess C3 during
+that run; after, it is boringly consistent, which is the more important
+property for a determinism claim.
+
+**This does not fully close the tail.** p99.99 and max still show occasional
+excursions into the hundreds of microseconds with C-states disabled (mean
+200 µs / 360 µs respectively in the same run) — a smaller, separate noise
+source, most likely IRQ or scheduling jitter. That is exactly the gap
+`isolcpus` / `nohz_full` / PREEMPT_RT work is meant to close; C-state
+disabling is a necessary precondition for that work to be measurable, not a
+replacement for it.
+
+`sudo cpupower idle-set -D 0` disables every listed idle state including
+POLL, so the CPU never executes an idle instruction — it is intentionally
+the most aggressive setting, appropriate for a benchmarking run, not for
+normal use. Re-enable after quoted runs:
+
+```bash
+sudo cpupower idle-set -E     # restore all idle states
+```
+
+`scripts/sweep.sh` and `scripts/fanout.sh` check idle-state status at
+startup and print a warning (not a hard failure — the scripts still run) if
+any state above C1 is enabled.
 
 ## 5. Sanity checks — what should worry you
 
@@ -142,6 +191,7 @@ zcring considerably — if you show that, label it.
 | zcring p50 fine but p99 in milliseconds at N>1 | a consumer is on the producer's SMT sibling |
 | zcring p50 in tens of µs at N=4 | spinner oversubscription; you need `--yield` |
 | fan-out consumer count doesn't change zcring latency much | expected — publication is O(1) in N. That is the result, not a bug |
+| p99.9 wildly different between otherwise-identical reps (some fine, one in the hundreds of µs / ms) | deep C-state entry — see §4a, run `sudo cpupower idle-set -D 0` |
 
 ## 6. What to report back
 

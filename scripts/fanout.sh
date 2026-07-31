@@ -26,6 +26,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 BENCH=build/bench
 [ -x "$BENCH" ] || { echo "build first: make"; exit 1; }
+. scripts/lib.sh
 
 mkdir -p results
 OUT=results/fanout.csv
@@ -56,6 +57,8 @@ echo "producer cpu:      $PROD (siblings: $SIBS)" >&2
 echo "consumer cpu list: $CONS" >&2
 echo "consumers per run: $NCONS  (wrapping over the list above)" >&2
 echo >&2
+
+check_cstates
 
 echo "transport,consumers,size,mean_ns,p50_ns,p99_ns,p999_ns,p9999_ns,max_ns" > "$OUT"
 for n in $NCONS; do

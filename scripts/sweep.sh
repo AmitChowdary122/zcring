@@ -12,6 +12,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 BENCH=build/bench
 [ -x "$BENCH" ] || { echo "build first: make"; exit 1; }
+. scripts/lib.sh
 
 mkdir -p results
 OUT=results/sweep.csv
@@ -46,6 +47,8 @@ pick_cores() {
 PIN=""
 if [ "$(nproc)" -ge 4 ]; then PIN=$(pick_cores); fi
 [ -n "$PIN" ] && echo "pinning: $PIN" >&2 || echo "pinning: none" >&2
+
+check_cstates
 
 echo "transport,size,mean_ns,p50_ns,p99_ns,p999_ns,p9999_ns,max_ns" > "$OUT"
 for size in $SIZES; do
