@@ -72,24 +72,39 @@ takes the credibility of everything adjacent with it.
 `scripts/sweep.sh` now passes `--touch` unconditionally. Do not add an escape
 hatch.
 
-### Claims that are defensible
+### Claims that are defensible (measured bare metal, 1 Aug 2026)
 
-- Eliminates **two of four memory passes** (producer write, kernel copy in,
-  kernel copy out, consumer read → producer write, consumer read).
 - Removes the **syscall from the data path** entirely.
-- Small messages (~1 KiB): very large wins, syscall-dominated.
-- Large messages (~1 MiB): converges to roughly **2×** vs a UNIX socket, which
-  is the pure copy-elimination bound.
+- Eliminates **two of four memory passes**, but note this does *not* yield 2×
+  at large payloads — see below.
+- **64 B: 18.8× vs pipe. 1 KiB: 7.8×. 4 KiB: 3.5×.** Small-message latency is
+  the real story, and it is the regime embedded real-time control lives in.
+- **Large payloads converge to 1.1–1.5× vs a UNIX socket**, because at that
+  point you are memory-bandwidth bound and the kernel's `memcpy` is very well
+  optimised.
 
-**Quote the ~2× floor, let the large multiples be upside.** Leading with the
-biggest number invites the scrutiny that breaks it.
+**An earlier version of this file claimed a "~2× floor" at 1 MiB. That came
+from VM data and is wrong — bare metal measures 1.1×.** Do not reinstate it.
+
+**Lead with small-message latency, not with a bandwidth multiplier.** State
+the large-payload convergence yourself before a judge finds it; then show
+fan-out, which is where the large-payload case is genuinely won (N consumers
+= N copies avoided, so the advantage grows linearly with N).
+
+**p99.9 is not quotable yet** — varies 1000× across identical reps due to OS
+scheduling noise on a non-isolated kernel. Needs the isolcpus/RT work first.
 
 ## Machines
 
 | Machine | Role |
 |---|---|
-| Ryzen 9 270, 16 threads, **WSL2 (Kali)** | Development. Fast builds. |
-| **This one — 4-core Ubuntu, bare metal** | **All quoted measurements.** |
+| Ryzen 9 270, 8C/16T, **WSL2 (Kali)** | Development. Fast builds. |
+| **Intel i3-1115G4, 2 physical cores + SMT, bare-metal Ubuntu** | **All quoted measurements.** |
+
+The measurement box is **dual-core with SMT** (`nproc` reports 4, but
+`lscpu` shows 2 cores/socket). Describe it as "dual-core with SMT", never as
+quad-core. WSL2 inflates even p50 by ~8–10× on the comparators, so nothing
+from that machine is quotable.
 
 WSL2 numbers are not usable for submission — hypervisor jitter inflates p99.9
 by orders of magnitude, and `cpupower` / `isolcpus` / `nohz_full` /

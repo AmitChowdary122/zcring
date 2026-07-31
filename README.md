@@ -45,33 +45,64 @@ the syscall from the data path entirely"* — not *"latency is independent of
 message size."* The honest curve still rises with payload; it just rises at
 roughly half the slope, from a far lower intercept.
 
-## Indicative Layer 1 results
+## Measured Layer 1 results
 
-p50 one-way latency, `--touch`, 2-vCPU virtualised sandbox — **sanity-check
-numbers only, not submission data.** Absolute values here are inflated by
-hypervisor jitter (a 22 µs pipe latency is roughly 3–4× what bare metal
-gives). Re-run on the target machine before anything goes in the abstract.
+p50 one-way latency, `--touch`, **bare metal**, Intel i3-1115G4 (2 physical
+cores + SMT), performance governor, background services stopped, mean of 5
+reps. Raw data in `results/sweep.csv`.
 
 | payload | zcring | pipe | unix | vs. best comparator |
 |---|---|---|---|---|
-| 1 KiB | 120 ns | 21.9 µs | 24.5 µs | ~180× |
-| 16 KiB | 781 ns | 26.3 µs | 27.3 µs | ~34× |
-| 256 KiB | 11.4 µs | 256 µs | 40.2 µs | ~3.5× |
-| 1 MiB | 63.7 µs | 920 µs | 124 µs | ~2× |
+| 64 B | 113 ns | 2.13 µs | 2.83 µs | **18.8×** |
+| 256 B | 137 ns | 2.17 µs | 2.92 µs | 15.8× |
+| 1 KiB | 290 ns | 2.27 µs | 3.13 µs | 7.8× |
+| 4 KiB | 791 ns | 2.74 µs | 3.96 µs | 3.5× |
+| 16 KiB | 3.01 µs | 5.61 µs | 6.23 µs | 1.9× |
+| 64 KiB | 10.5 µs | 17.2 µs | 13.1 µs | 1.25× |
+| 256 KiB | 32.6 µs | 71.6 µs | 35.8 µs | 1.10× |
+| 1 MiB | 123 µs | 335 µs | 181 µs | 1.47× |
 
-The shape of this table is the real finding, and it is more interesting than a
-single headline multiplier:
+Run-to-run p50 spread is within single-digit percent of the mean everywhere.
+This part is solid and quotable as-is.
 
-- **Small messages win enormously** — the syscall, not the copy, is the
-  dominant cost, and zero-copy removes it from the data path entirely.
-- **Large messages converge toward ~2×** against a UNIX socket, which is the
-  pure copy-elimination bound. This is the number to quote conservatively.
-- **Pipe degrades badly past its 64 KiB capacity**, requiring repeated
-  blocking round-trips. Worth showing, but don't lean on it — a judge will
-  point out that pipes were never intended for megabyte payloads.
+### What this actually says — read it carefully
 
-Quote the ~2× floor and let the 180× peak be the upside. Leading with the
-biggest number invites exactly the scrutiny that breaks it.
+The advantage is **latency on small messages, not bandwidth on large ones.**
+
+- **Small messages (≤ 4 KiB): 3.5–19×.** Here the syscall and the fixed
+  per-message overhead dominate, and zero-copy removes them from the data path
+  entirely. This is the regime real-time embedded control traffic actually
+  lives in — sensor readings, actuator commands, state updates.
+- **Large messages: converges to 1.1–1.5×.** Once you are memory-bandwidth
+  bound, the kernel's `memcpy` is extremely well optimised (non-temporal
+  stores, prefetch, wide vectors), while zcring pays cross-core cache-line
+  transfer costs of its own. Eliminating two of four memory passes does *not*
+  translate into a clean 2× at the top end.
+- **The ratio is non-monotonic** (1.10× at 256 KiB, 1.47× at 1 MiB) because
+  256 KiB working sets still fit in this CPU's L2 while 1 MiB does not, so the
+  copy-based transports degrade faster once they spill.
+
+> **An earlier draft of this file claimed a "~2× floor" at large payloads.
+> That was derived from VM measurements and does not survive bare metal. The
+> measured floor is 1.1×.** Corrected here rather than quietly dropped,
+> because the difference between claiming 2× and measuring 1.1× in front of a
+> judge is the whole submission.
+
+**Where the large-payload case is actually won: fan-out.** With N consumers, a
+copy-based transport pays N copies; zcring pays none. The single-consumer
+1.47× at 1 MiB becomes a multiple that grows linearly with consumer count.
+That is the measurement to build, and it is also what the *scalability*
+criterion in the rubric is asking for.
+
+### p99.9 is not yet quotable
+
+Tail latency currently varies by three orders of magnitude across identical
+repetitions (zcring at 64 B ranged 997 ns – 1.18 ms over 5 reps). All three
+transports show it, so it is OS scheduling noise on a non-isolated, non-RT
+kernel — not a ring defect. **Do not quote any p99.9 figure until the
+`isolcpus` / `nohz_full` / PREEMPT_RT work is done.** That work is the top
+differentiator in the plan precisely because the problem statement asks for
+*deterministic* communication.
 
 ## Known gaps (Layer 2 work)
 
