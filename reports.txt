@@ -1,0 +1,213 @@
+zcring — bare-metal baseline report
+===================================
+
+Date:    1 Aug 2026
+Machine: 11th Gen Intel Core i3-1115G4 @ 3.00GHz
+Commit:  b94051e
+
+
+0. Housekeeping / corrections
+-----------------------------
+
+- This machine is an i3-1115G4: 2 PHYSICAL CORES / 4 THREADS (SMT), not a
+  true 4-core part as CLAUDE.md assumes. `nproc` reports 4, but `lscpu`
+  shows "Core(s) per socket: 2". The sweep's pinning is still correct
+  (cpu2/cpu3 map to distinct physical cores, verified via core_id), but the
+  "4 cores, embedded-representative" framing in the abstract should say
+  "dual-core w/ SMT", not quad-core.
+
+- `git commit` needed a local identity; set to amitchowdary.d@gmail.com with
+  a guessed name "Amit Chowdary". Fix if wrong.
+
+- The root password pasted into the session transcript should be rotated.
+
+- `make tsan` was genuinely broken on this kernel: ASLR/PIE base landing
+  outside TSan's shadow-memory range, aborting before any test ran. Not a
+  race in the ring. Fixed by wrapping the run in `setarch -R`; TSan now runs
+  clean. Committed.
+
+- `make clean` deletes results/ wholesale. Hit this by accident and restored
+  from git. Worth knowing; the Makefile change itself is intentional.
+
+
+1. Verification
+---------------
+
+`make && make test && make tsan` — all pass clean, no compiler warnings,
+no data races reported.
+
+
+2. Topology
+-----------
+
+CPU:                 11th Gen Intel Core i3-1115G4 @ 3.00GHz
+Logical CPUs:        4 (0-3)
+Physical cores:      2
+Threads per core:    2
+
+thread_siblings_list:
+    cpu0: 0,2   core_id 0
+    cpu1: 1,3   core_id 1
+    cpu2: 0,2   core_id 0
+    cpu3: 1,3   core_id 1
+
+Pinning line chosen by scripts/sweep.sh:
+
+    pinning: --cpu-prod=2 --cpu-cons=3
+
+cpu2 has core_id 0, cpu3 has core_id 1 — distinct physical cores, NOT SMT
+siblings. Correct choice.
+
+
+3. Quieting the machine (methodology)
+-------------------------------------
+
+Stopped:
+    unattended-upgrades.service
+    snapd.service
+    snapd.socket
+
+Masked:
+    apt-daily.timer
+    apt-daily-upgrade.timer
+
+Governor:
+    cpupower frequency-set -g performance
+    verified via `cpupower frequency-info -o proc`: all 4 logical CPUs
+    report governor "performance", 400 MHz - 4100 MHz range.
+
+Desktop indexing: no tracker/baloo/indexer process was running on this
+system; nothing to disable.
+
+
+4. Baseline sweep
+-----------------
+
+Command:  REPS=5 COUNT=50000 GAP=100 ./scripts/sweep.sh
+Mode:     --touch (unconditional in sweep.sh)
+Raw data: results/sweep.csv (committed, 120 runs)
+
+p50 one-way latency, mean of 5 reps:
+
+    size      zcring p50    pipe p50    unix p50   best comp.   ratio
+    ------------------------------------------------------------------
+    64 B         113 ns     2.13 us     2.83 us    pipe         18.8x
+    256 B        137 ns     2.17 us     2.92 us    pipe         15.8x
+    1 KiB        290 ns     2.27 us     3.13 us    pipe          7.8x
+    4 KiB        791 ns     2.74 us     3.96 us    pipe          3.5x
+    16 KiB      3.01 us     5.61 us     6.23 us    pipe          1.9x
+    64 KiB     10.48 us    17.20 us    13.06 us    unix         1.25x
+    256 KiB    32.57 us    71.63 us    35.75 us    unix         1.10x
+    1 MiB     123.25 us   334.55 us   181.14 us    unix         1.47x
+
+Run-to-run p50 spread (min - mean - max across 5 reps):
+
+    size      transport   p50 min      p50 mean     p50 max
+    ------------------------------------------------------------
+    64 B      zcring       111 ns       113 ns       115 ns
+    64 B      pipe        2.10 us      2.13 us      2.18 us
+    64 B      unix        2.79 us      2.83 us      2.93 us
+    256 B     zcring       136 ns       137 ns       140 ns
+    256 B     pipe        2.12 us      2.17 us      2.22 us
+    256 B     unix        2.86 us      2.92 us      2.95 us
+    1 KiB     zcring       283 ns       290 ns       295 ns
+    1 KiB     pipe        2.24 us      2.27 us      2.33 us
+    1 KiB     unix        3.07 us      3.13 us      3.15 us
+    4 KiB     zcring       781 ns       791 ns       803 ns
+    4 KiB     pipe        2.70 us      2.74 us      2.79 us
+    4 KiB     unix        3.93 us      3.96 us      4.02 us
+    16 KiB    zcring      3.01 us      3.01 us      3.02 us
+    16 KiB    pipe        5.55 us      5.61 us      5.65 us
+    16 KiB    unix        6.17 us      6.23 us      6.30 us
+    64 KiB    zcring     10.45 us     10.48 us     10.51 us
+    64 KiB    pipe       17.18 us     17.20 us     17.23 us
+    64 KiB    unix       12.97 us     13.06 us     13.21 us
+    256 KiB   zcring     32.21 us     32.57 us     32.83 us
+    256 KiB   pipe       71.17 us     71.63 us     72.16 us
+    256 KiB   unix       35.18 us     35.75 us     36.64 us
+    1 MiB     zcring    122.39 us    123.25 us    124.13 us
+    1 MiB     pipe      333.96 us    334.55 us    335.73 us
+    1 MiB     unix      178.83 us    181.14 us    183.26 us
+
+p50 spread is tight everywhere — single-digit percent of the mean. This
+part is solid and quotable as-is.
+
+p99.9 latency (min - mean - max across 5 reps):
+
+    size      transport   p99.9 min    p99.9 mean   p99.9 max
+    ------------------------------------------------------------
+    64 B      zcring       997 ns     246.59 us      1.18 ms
+    64 B      pipe      714.99 us       1.69 ms      2.60 ms
+    64 B      unix      625.07 us       1.40 ms      2.36 ms
+    256 B     zcring      850 ns      29.12 us    141.56 us
+    256 B     pipe      587.48 us     792.22 us      1.04 ms
+    256 B     unix      479.53 us       1.09 ms      2.89 ms
+    1 KiB     zcring     3.54 us       3.70 us      3.82 us
+    1 KiB     pipe      125.57 us     723.80 us      1.18 ms
+    1 KiB     unix      726.39 us     889.01 us      1.06 ms
+    4 KiB     zcring     4.60 us     395.20 us      1.96 ms
+    4 KiB     pipe      503.43 us     999.37 us      2.27 ms
+    4 KiB     unix      704.38 us       1.21 ms      2.26 ms
+    16 KiB    zcring    10.59 us      10.75 us     11.32 us
+    16 KiB    pipe      372.18 us     579.89 us    796.55 us
+    16 KiB    unix      393.14 us     797.86 us      1.03 ms
+    64 KiB    zcring    20.93 us     186.66 us    845.16 us
+    64 KiB    pipe      184.51 us     214.88 us    270.46 us
+    64 KiB    unix      179.85 us     578.90 us    911.48 us
+    256 KiB   zcring    59.19 us      64.56 us     69.72 us
+    256 KiB   pipe      252.36 us     422.97 us    856.26 us
+    256 KiB   unix      122.30 us     145.48 us    168.78 us
+    1 MiB     zcring   171.99 us     225.00 us    268.36 us
+    1 MiB     pipe      567.45 us    860.90 us       1.50 ms
+    1 MiB     unix      274.47 us    318.76 us    371.43 us
+
+
+5. Two things that must change before the abstract
+--------------------------------------------------
+
+5.1 The "~2x floor vs UNIX socket at large payload" claim in README.md does
+    not hold on bare metal.
+
+    Measured floor is 1.1x - 1.5x, not 2x, and it is non-monotonic:
+    1.10x at 256 KiB, rising back to 1.47x at 1 MiB. This is real
+    bare-metal data superseding the VM-derived indicative table, so the
+    README claim needs revising DOWN, not the reverse. Better to walk in
+    with 1.5x and be right than 2x and get caught.
+
+5.2 p99.9 is currently unusable for the abstract.
+
+    Spread across reps is enormous — zcring at 64 B ranges from 997 ns to
+    1.18 ms across 5 reps at the SAME config. All three transports show
+    this, so it is not a ring defect; it is OS scheduling noise on a
+    non-isolated, non-RT kernel. This is exactly the gap PLAN.md section 5
+    flags (isolcpus / nohz_full / PREEMPT_RT — item 4 in CLAUDE.md's
+    next-tasks list). Do not quote p99.9 until that work is done.
+
+
+6. Comparison against the WSL2 run
+----------------------------------
+
+Prior results/sweep.csv came from the 16-thread Ryzen under WSL2, and was
+run WITHOUT --touch.
+
+Comparator transports (pipe/unix), which are unaffected by the --touch
+issue, confirm the hypervisor-jitter claim — and confirm it hits p50, not
+just the tail:
+
+    payload    transport   WSL2 p50     bare-metal p50   speedup
+    ---------------------------------------------------------------
+    1 KiB      pipe         22.81 us         2.27 us      10.1x
+    1 KiB      unix         25.55 us         3.13 us       8.2x
+    1 MiB      pipe        969.55 us       334.55 us       2.9x
+
+The WSL2 zcring column is not comparable at all: that run predates
+--touch and shows the harness artifact CLAUDE.md warns about — a flat
+~90 ns p50 at every payload size including 1 MiB, which is not physically
+possible. It is an artifact, not a measurement.
+
+
+7. State
+--------
+
+Committed as b94051e (Makefile TSan fix + results/sweep.csv).
+Layer 2 not started — gated on review of this baseline.

@@ -4,7 +4,7 @@ LDFLAGS ?= -pthread
 
 BUILD := build
 
-.PHONY: all clean test sweep tsan
+.PHONY: all clean test sweep fanout tsan
 
 all: $(BUILD)/bench $(BUILD)/test_zcring
 
@@ -36,5 +36,11 @@ test: $(BUILD)/test_zcring
 sweep: $(BUILD)/bench
 	@./scripts/sweep.sh
 
+fanout: $(BUILD)/bench
+	@./scripts/fanout.sh
+
+# results/ is deliberately NOT removed. Benchmark CSVs are committed evidence
+# that can cost an hour of quiet-machine time to regenerate, and a routine
+# `make clean` must not be able to destroy them.
 clean:
-	rm -rf $(BUILD) results
+	rm -rf $(BUILD)

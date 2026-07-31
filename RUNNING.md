@@ -80,6 +80,35 @@ Writes `results/sweep.csv`.
 
 Useful flags: `--size` `--count` `--warmup` `--gap-us` `--cpu-prod` `--cpu-cons`.
 
+## 3a. Fan-out (Layer 2)
+
+```bash
+./build/bench --transport=zcring --consumers=4 --size=4096 --touch --yield \
+              --cpu-prod=2 --cpu-cons=3,1
+make fanout                                       # full N x payload sweep
+REPS=5 COUNT=50000 GAP=100 ./scripts/fanout.sh    # submission-grade
+```
+
+Writes `results/fanout.csv`. Three things about this mode that will bite you
+if you skip them:
+
+- **`--cpu-cons` is a list, and it must exclude the producer's SMT sibling.**
+  Consumer *k* pins to the *k*'th entry, wrapping. Putting a spinning consumer
+  on the producer's sibling thread leaves p50 looking fine and inflates p99 by
+  ~185× — it was measured on this machine, it is not hypothetical.
+  `scripts/fanout.sh` derives the list from `thread_siblings_list`; check the
+  two lines it prints.
+- **Use `--yield` for anything with N above 2 on a small machine.** zcring
+  waiters spin; at N=4 on two physical cores there are more spinners than
+  hardware threads and you measure scheduler thrash, not fan-out. Pure spin
+  reports p50 = 90 µs at 4 KiB; `--yield` reports 2.1 µs for the same
+  configuration. Keep the flag consistent across every row you intend to
+  compare.
+- **`--consumers` selects zcring's broadcast path even at N=1**, so fan-out
+  rows are comparable to each other. Omitting it keeps the Layer 1 unicast
+  path, which is what `sweep.csv` was measured with. The two are therefore not
+  directly comparable at N=1; the difference is the gate's own overhead.
+
 ## 4. Getting numbers worth quoting
 
 Latency tails are extremely sensitive to what else the machine is doing. For
@@ -110,6 +139,9 @@ zcring considerably — if you show that, label it.
 | p99.9 more than ~50× p50 | background load or frequency scaling, not a real tail |
 | `make test` passes but tsan reports races | trust tsan; the ring is wrong |
 | huge variance between identical runs | machine is not quiet enough to measure on |
+| zcring p50 fine but p99 in milliseconds at N>1 | a consumer is on the producer's SMT sibling |
+| zcring p50 in tens of µs at N=4 | spinner oversubscription; you need `--yield` |
+| fan-out consumer count doesn't change zcring latency much | expected — publication is O(1) in N. That is the result, not a bug |
 
 ## 6. What to report back
 

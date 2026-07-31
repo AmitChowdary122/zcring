@@ -1,16 +1,46 @@
 # zcring — zero-copy shared-memory IPC framework
 
-Layer 1 of the plan in [PLAN.md](PLAN.md): a lock-free MPMC ring over a
+Layers 1–2 of the plan in [PLAN.md](PLAN.md): a lock-free MPMC ring over a
 memfd-backed shared mapping, with `reserve`/`commit` and `acquire`/`release`
 handing back raw pointers into shared memory for in-place construction and
-reading. No `memcpy` in the data path.
+reading, plus a broadcast fan-out mode where N consumers each see every
+message. No `memcpy` in the data path.
 
 ```
 make            # build
 make test       # correctness: exactly-once delivery under contention
 make tsan       # thread-sanitised run — catches memory-ordering bugs
 make sweep      # payload sweep -> results/sweep.csv
+make fanout     # payload x consumer-count sweep -> results/fanout.csv
 ```
+
+## Layer 2 — broadcast fan-out
+
+One producer, N consumers, every consumer sees every message, zero copies for
+all of them. `zc_bcast_*` alongside the Layer 1 unicast API; the full design
+rationale lives at the top of `src/zcring.h`. The three decisions worth
+knowing before reading the code:
+
+- **Per-consumer cursors, min-cursor gating.** Each consumer owns a cursor on
+  its own cache line; the producer may only recycle a slot once the slowest
+  active consumer has passed it. Chosen over per-slot refcounting because
+  refcounting puts a contended atomic on a line shared by all N consumers,
+  which degrades fan-out exactly where it should scale — and has no answer for
+  a consumer that dies holding a reference.
+- **Slow consumers get backpressure, not drops.** `zc_bcast_reserve()` returns
+  NULL rather than overwriting. This keeps "every active consumer receives
+  every message" a checkable invariant, and leaves drop policy to the
+  application, which is the only layer that knows whether a stale frame is
+  better discarded or delivered late. `zc_bcast_lag()` exposes the depth so an
+  application can implement drop-oldest itself.
+- **Death is recovered, slowness is not punished.** `zc_bcast_reap()` evicts
+  consumers whose owning process is gone, so one crashed peer cannot gate the
+  ring forever. A merely descheduled consumer is alive and keeps its
+  backpressure — that is flow control working, not a fault.
+
+Zero-copy stops being a constant-factor win here and becomes an asymptotic
+one: publication is one release store regardless of N, whereas any copying
+transport pays N copies in and N out.
 
 ## Benchmark methodology, and the trap in it
 
@@ -104,12 +134,26 @@ kernel — not a ring defect. **Do not quote any p99.9 figure until the
 differentiator in the plan precisely because the problem statement asks for
 *deterministic* communication.
 
-## Known gaps (Layer 2 work)
+## Known gaps
 
-- The zcring consumer **spins**; pipe/unix consumers block. Idle CPU cost is
-  therefore not comparable yet. Layer 2's adaptive spin-then-futex path is the
-  honest fix.
-- Single producer → single consumer only in the benchmark. Fan-out to N
-  consumers is where the advantage becomes multiplicative, and it is the work
-  item that speaks to *scalability* in the rubric.
-- No crash recovery yet: a producer dying mid-`reserve` leaks that slot.
+**Done since:** fan-out to N consumers (above), and consumer-side crash
+recovery via `zc_bcast_reap()`.
+
+- **Notification is still the missing piece, and it is now the binding
+  constraint on measurement.** zcring waiters busy-wait while pipe/unix block
+  in `read()`. On this dual-core machine that stops being a fairness footnote
+  at N=4, where producer plus consumers outnumber the hardware threads and
+  pure spinning inflates zcring p50 by ~40×. `--yield` (bounded spin, then
+  `sched_yield`) is the stopgap the fan-out sweep uses; adaptive
+  spin-then-futex is the real fix and is the next work item.
+- **Producer-side crash recovery is still absent.** A *producer* dying
+  mid-`reserve` leaks that slot — `zc_bcast_reap()` recovers dead consumers
+  only. Consumer death is the more common failure and the one that could
+  deadlock the ring, which is why it came first.
+- **Fan-out scalability cannot be demonstrated past N≈2 on this hardware.**
+  Two physical cores means N=4 oversubscribes regardless of implementation
+  quality. The trend across N=1,2,4 is real, but the N=4 absolute numbers are
+  a property of the measurement box, and should be presented that way.
+- `zc_bcast_reap()` liveness detection is process-granular: it cannot see a
+  dead *thread* inside a live process, and it cannot reclaim a zombie until
+  its parent has waited for it. Both are documented at `src/zcring.h` §3.
