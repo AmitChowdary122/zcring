@@ -169,6 +169,30 @@ suggest. Still gated on Layers 1–2 being solid.
 6. **Demo + presentation.** Reserved for the final week. Do not spend it
    coding.
 
+## Shared memory across machines and sessions
+
+This project runs on two machines (Windows/Cowork for planning and docs,
+bare-metal Ubuntu/Claude Code for building and measuring) and across many
+sessions. **No model remembers anything between sessions. The repo is the
+only memory.**
+
+`STATUS.md` is that memory. It holds current state, open problems, decisions
+already made, and traps already hit. It is read by whichever machine picks
+the work up next.
+
+Obligations, both machines:
+
+- `git pull` **before** starting work. `git push` **when stopping.**
+- **Update `STATUS.md` at the end of any working session** — findings,
+  decisions, anything discovered that is not obvious from the code. A result
+  reported only in chat is lost the moment the session closes. This has
+  already nearly cost us the C-state finding and the offered-rate problem.
+- Design rationale goes in the relevant header, not in chat. `src/zcring.h`
+  is the model to follow.
+- In the Windows working tree, stage files **by name**. Never `git add -A`
+  there: it only ever holds current doc edits, everything else in it is stale,
+  and a blind `-A` once reverted a Makefile fix and clobbered a dataset.
+
 ## Working conventions
 
 - C11, `-Wall -Wextra`, keep the build **warning-free**.
