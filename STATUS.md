@@ -36,27 +36,47 @@ single pass is less exposed.
 function of message rate.** Quoting 2.32× invites a judge to rerun at a
 different gap, get 1.38×, and conclude the rate was cherry-picked.
 
-**Required fix before any number goes in the abstract:** choose one offered
-rate as an explicit methodology decision (stated fraction of measured
-saturation, same rule at every payload), rerun *both* the baseline and
-fan-out sweeps there, and add a sensitivity check at two other rates showing
-the qualitative conclusions hold. Then delete the superseded tables rather
-than leaving several versions in the repo.
+**Status: half done.** The *mechanism* exists — `scripts/rates.sh` holds a
+per-size saturation table and `sweep.sh` now takes `RATE_FRACTION` (default
+25, i.e. a quarter of each size's measured saturation rate, 4× headroom above
+the knee). **The datasets have not been regenerated with it.**
 
-## Open problem #2 — deep C-states pollute the tails
+- `results/sweep.csv` is still the old flat-gap baseline (timestamp 02:46,
+  predates the rate work). **Do not quote from it.**
+- `results/fanout.csv` was run at a flat `GAP=100`, so it carries the same
+  problem.
 
-Hypothesised, not yet confirmed at time of writing. This machine exposes
-`C3_ACPI` with a **1048 µs exit latency**, which matches an observed 1220 µs
-p99.9 at 64 B / N=1 almost exactly. It also explains an otherwise impossible
-result — tail latency *improving* as consumers are added (more consumers keep
-cores busy, so they never reach C3).
+**Remaining work:** rerun both sweeps at `RATE_FRACTION=25`, REPS=5, C-states
+disabled; add a sensitivity check at two other fractions showing conclusions
+hold; then delete superseded tables from README.md rather than leaving
+several versions in the repo. Until that is done, no large-payload ratio is
+safe to publish.
 
-Confirm with `sudo cpupower idle-set -D 0` and rerun. If confirmed, deep
-C-state disabling belongs in the quieting checklist alongside the governor,
-and the exit-latency table is good material for the determinism section: a
-concrete, measurable, hardware-level jitter source with a documented fix.
+## Open problem #2 — deep C-states — RESOLVED 1 Aug 2026
 
-**p99.9 is not quotable until this and the isolcpus/RT work are done.**
+Confirmed. `C3_ACPI` on this machine has a **1048 µs exit latency**, and it
+was landing directly in the tail. Measured at 64 B / N=1, 5 reps:
+
+| | p99.9 mean | p99.9 range |
+|---|---|---|
+| C-states enabled | 354 µs | 787 ns – 1.77 ms |
+| `cpupower idle-set -D 0` | **2.4 µs** | 1.4 µs – 4.2 µs |
+
+The headline is not the mean dropping — it is the **variance collapsing**.
+Before, p99.9 depended on whether the cpuidle governor happened to pick C3
+during that run; after, it is boringly consistent. Consistency is the
+property a determinism claim actually needs.
+
+Full detail and the re-enable command are in `RUNNING.md` §4a. `sweep.sh` and
+`fanout.sh` now warn if any state above C1 is enabled.
+
+**This does not fully close the tail.** p99.99 and max still show excursions
+into the hundreds of microseconds — a separate, smaller noise source, most
+likely IRQ or scheduling jitter. That is what the `isolcpus` / `nohz_full` /
+PREEMPT_RT work is for; C-state disabling is a precondition for that work to
+be measurable, not a substitute.
+
+**p99.9 is now quotable at N=1 with C-states disabled.** p99.99 is not.
 
 ## Open problem #3 — fan-out scaling is capped by the measurement hardware
 
@@ -94,16 +114,24 @@ a different thing and is valid.
 
 ## Next steps, in order
 
-1. Confirm the C-state hypothesis; fold into the quieting checklist. *Sonnet.*
-2. Regenerate one coherent dataset at a single justified offered rate,
-   baseline and fan-out, and retire the superseded tables. *Sonnet.*
-3. Optional but recommended: live-USB scaling run on the Ryzen for N=8.
-   *Sonnet.*
-4. **Draft the abstract.** Target submission 8–10 Aug; window closes 25 Aug.
+1. **Regenerate both datasets at `RATE_FRACTION=25`**, REPS=5, C-states
+   disabled — baseline and fan-out. Add a sensitivity check at two other
+   fractions. Update README.md tables and delete the superseded ones.
+   *Sonnet.* This is the only thing blocking the abstract.
+2. Optional but recommended: live-USB scaling run on the Ryzen for N=8.
+   *Sonnet.* Do this only if the abstract will claim scaling beyond N=2.
+3. **Draft the abstract.** Target submission 8–10 Aug; window closes 25 Aug.
    *Opus.*
-5. Adaptive spin-then-futex notification — removes the `--yield` stopgap and
+4. Adaptive spin-then-futex notification — removes the `--yield` stopgap and
    makes idle CPU cost comparable to the blocking comparators. *Opus, and
    only after the abstract.*
+5. Producer crash recovery; determinism rigor (isolcpus / nohz_full /
+   PREEMPT_RT); iceoryx and ZeroMQ comparators; demo; presentation.
+
+`reports.txt` holds the full Layer 1 and Layer 2 session reports, including
+the fan-out design rationale and the bufferbloat analysis in §12. Note that
+its §15 predates the C-state confirmation above and says "not yet confirmed"
+— that is stale; `RUNNING.md` §4a is authoritative.
 
 ## Model policy
 
