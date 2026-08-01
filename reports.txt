@@ -772,3 +772,60 @@ Primary-rate (RATE_FRACTION=25) baseline and fan-out sweeps: done, clean,
 committed to results/sweep.csv and results/fanout.csv. Sensitivity sweeps
 at RATE_FRACTION=10 and 50 (reduced scope: REPS=3, sizes 64B/4KiB/1MiB, for
 both scripts) running in background as this is written.
+
+
+23. Session close: sensitivity results, commits, final state
+----------------------------------------------------------------
+
+Sensitivity sweeps (item 22) finished clean. Both conclusions that matter
+hold within a few percent across a 5x offered-rate range (10%/25%/50% of
+saturation):
+
+    size            metric              10%     25%     50%
+    ------------------------------------------------------------
+    64 B            zcring vs best      19.5x   19.6x   19.8x
+    4 KiB           zcring vs best      3.10x   3.66x   3.48x
+    1 MiB, N=1      zcring vs best      0.83x   0.84x   0.83x
+    1 MiB, N=2      zcring vs best      1.32x   1.38x   1.38x
+    1 MiB, N=4      zcring vs best      1.98x   2.03x   2.07x
+
+The rate choice isn't doing the work at any point on this table -- the
+C-state trade-off (item 22) and the fan-out scaling are what the numbers
+actually reflect. Confirms RATE_FRACTION=25 is a safe, non-cherry-picked
+choice of primary rate to headline.
+
+Wrote the sensitivity table into README.md's "Offered rate" section, then
+did a full top-to-bottom read of README.md to check the rewrite reads as
+one coherent document rather than patched-in sections. Also updated
+CLAUDE.md's "Claims that are defensible" block, which still had the old
+18.8x/1.1-1.5x numbers and would have misled a fresh session reading it
+first -- brought it in line with README.md's corrected claims, using the
+same "two earlier versions of this claim were wrong, here's why" pattern
+already established in that file for the VM-vs-bare-metal correction.
+
+`make test` re-run before committing (project convention) -- all checks
+still pass; none of this session's changes touched src/.
+
+Two commits this session, both pushed to origin/main:
+
+    07ac60d  Reconfirm C-state tail-latency fix; document in README,
+             STATUS, reports                              (item 17)
+    847bee2  Regenerate offered-rate dataset with thermal gating;
+             disclose large-payload C-state trade-off      (items 19-23)
+
+Machine restored to normal (C-states re-enabled) after the last quoted run,
+per RUNNING.md's own guidance not to leave them disabled outside of
+benchmarking sessions.
+
+Session state at close: both of today's tasks (C-state reconfirmation;
+offered-rate dataset regen) are done, documented, and pushed. STATUS.md's
+open problems #1, #2, #4, #5 are all resolved (#5 disclosed rather than
+fixed -- see item 22). Open problems #3 (fan-out hardware ceiling) and the
+unstarted items in STATUS.md's "Where the project stands" (adaptive
+spin-then-futex notification, producer crash recovery, isolcpus/nohz_full/
+PREEMPT_RT, iceoryx/ZeroMQ comparators, demo, presentation) are unchanged
+by this session and remain the next work, in the order STATUS.md lists
+them. Adaptive notification is next per both STATUS.md and the several
+cross-references to it added in this session's README rewrite (the 64B
+N=4 spinner-oversubscription artifact and the zcring-busy-spin-vs-
+blocking-consumer asymmetry both point at the same fix).
