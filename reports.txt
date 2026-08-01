@@ -829,3 +829,71 @@ them. Adaptive notification is next per both STATUS.md and the several
 cross-references to it added in this session's README rewrite (the 64B
 N=4 spinner-oversubscription artifact and the zcring-busy-spin-vs-
 blocking-consumer asymmetry both point at the same fix).
+
+
+24. Follow-up session: busy-spin/power-budget hypothesis for item 22 --
+    tested directly, negative result
+--------------------------------------------------------------------------
+
+Picked back up item 22's unexplained mechanism with a specific, falsifiable
+hypothesis: the zcring consumer spins continuously while waiting (at 1 MiB
+/ gap=100us, ~100us of unbroken max-frequency polling per message) while
+unix's consumer blocks in read(). On a 15W part, sustained all-core
+activity should collapse the turbo power budget and constrain uncore/
+memory-controller frequency -- exactly what a 1 MiB bandwidth-bound
+transfer depends on. Predicts the observed asymmetry: zcring penalized,
+unix not, matching item 19's heat-asymmetry finding too (zcring ~70%
+degradation under heat, unix 0-20%).
+
+Machine wasn't quiet at the start of this follow-up (Firefox running again,
+same risk as item 17 -- killed it, confirmed with the process list before
+proceeding). C-states had also reverted to enabled since the last session
+ended (machine restored to normal per item 23's closing note) -- reset to
+disabled before testing.
+
+Built a diagnostic: `--sleep` flag in bench.c, `wait_backoff_sleep()` --
+plain nanosleep(1us-requested) between polls on the CONSUMER side only
+(producer's pacing and its own rare wait_backoff call are untouched), no
+futex, explicitly not for quoted data. If the hypothesis holds, this should
+recover something close to the C-states-enabled ~123-133us figure despite
+its own sleep-wake overhead.
+
+Controlled A/B/C, 1 MiB, N=1, gap=100us, cool machine (wait_for_cool()
+before every rep), C-states disabled, 5 reps each, no poller interference.
+Raw data: results/cstate_mechanism.csv.
+
+    condition                      p50 range (ns)        mean (ns)
+    ------------------------------------------------------------------
+    zcring, spin (default)         197905 - 203320        200121
+    zcring, --sleep (diagnostic)   222437 - 227211         224052
+    unix, control                  178722 - 185002         182384
+
+Sleep made it WORSE, not better -- landed above the spin baseline, further
+from unix than spin was. Hypothesis, as tested, is NOT supported.
+
+Caveat recorded rather than glossed over: this specific test may not
+actually isolate what it set out to. Deep C-states are disabled at the OS
+level for the pinned CPUs regardless of *why* a core goes idle -- spin-
+then-yield, block in nanosleep(), or block in read() are all governed by
+the same disabled cpuidle framework. So --sleep may not grant the
+consumer's core access to any power state it didn't already lack under
+spin; the ~24us it added on top of the spin baseline is more likely just
+nanosleep's own wake-granularity overhead on a non-RT kernel than evidence
+against the underlying power-budget mechanism specifically. A test that
+actually distinguishes them would need a real block-and-wake primitive
+(futex) with a qualitatively different relationship to the scheduler than
+either spin or nanosleep gets -- which is Layer 2's adaptive spin-then-
+futex notification work, not yet built.
+
+Net: mechanism for item 22's ~65% cost is still not identified. Ruled out
+so far -- offered rate (item 19/STATUS #1), thermal throttling alone (item
+19/21/STATUS #4), and now naive consumer busy-spin via this negative
+result. What's confirmed to matter: the C-state enable/disable setting
+itself, cleanly and reproducibly (item 22/STATUS #5). Recorded as an open
+question in STATUS.md rather than left unaddressed -- not blocking, since
+README.md already discloses the finding as a trade-off independent of
+mechanism. `--sleep` stays in bench.c as a diagnostic flag, unused by any
+committed sweep, in case someone picks this back up before the deadline.
+
+`make test` re-run after the bench.c change -- unaffected (bench.c isn't
+part of the test binary), passes clean regardless.

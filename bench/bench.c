@@ -133,6 +133,27 @@ static inline void wait_backoff(int use_yield, uint32_t *spins)
     if (++*spins >= YIELD_SPINS) { *spins = 0; sched_yield(); }
 }
 
+/* --sleep: diagnostic only, consumer-side.
+ *
+ * Deliberately crude: a plain nanosleep(1us-requested) between polls instead
+ * of spinning, no futex, not meant to be fast. Exists to test one specific
+ * hypothesis (STATUS.md Open problem #5): that the zcring consumer's
+ * continuous busy-spin -- not thermal state, not offered rate -- is what
+ * costs ~65% at 1 MiB when deep C-states are disabled, by denying the core a
+ * real block/wake cycle the way pipe/unix's read() gets for free. If this
+ * recovers something close to the C-states-enabled latency despite its own
+ * sleep-wake overhead, that is direct support for the hypothesis; if it
+ * doesn't, the hypothesis is wrong and this flag has done its job either way.
+ * Only wired into the consumer's wait loop -- the producer's inter-message
+ * pacing (spin_until) and its own (rarely-hit, ring-full) wait_backoff call
+ * are deliberately left alone, since the question is specifically about the
+ * consumer's poll behaviour. */
+static inline void wait_backoff_sleep(void)
+{
+    struct timespec ts = { .tv_sec = 0, .tv_nsec = 1000 }; /* 1us requested */
+    nanosleep(&ts, NULL);
+}
+
 static int write_full(int fd, const void *buf, size_t n)
 {
     const uint8_t *p = buf;
@@ -181,7 +202,7 @@ int main(int argc, char **argv)
     int      cpu_prod = -1;
     int      cons_cpu[MAX_CONS];
     int      ncons_cpu = 0;
-    int      csv = 0, touch = 0, use_yield = 0;
+    int      csv = 0, touch = 0, use_yield = 0, use_sleep = 0;
     int      nc = 1, nc_given = 0;
 
     for (int i = 1; i < argc; i++) {
@@ -210,16 +231,20 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--csv")) csv = 1;
         else if (!strcmp(argv[i], "--touch")) touch = 1;
         else if (!strcmp(argv[i], "--yield")) use_yield = 1;
+        else if (!strcmp(argv[i], "--sleep")) use_sleep = 1;
         else if (!strcmp(argv[i], "--help")) {
             printf("usage: %s [--transport=zcring|pipe|unix] [--size=N] [--count=N]\n"
                    "          [--warmup=N] [--gap-us=N] [--cpu-prod=N] [--cpu-cons=A,B,..]\n"
-                   "          [--consumers=N] [--touch] [--yield] [--csv]\n"
+                   "          [--consumers=N] [--touch] [--yield] [--sleep] [--csv]\n"
                    "  --cpu-cons   CPU list; consumer k pins to the k'th entry, wrapping.\n"
                    "               Must not include the producer's SMT sibling.\n"
                    "  --touch      produce and consume every payload cache line (fair mode)\n"
                    "  --yield      bounded spin then sched_yield in zcring waits, instead\n"
                    "               of pure busy-wait. Separates fan-out cost from spinner\n"
                    "               oversubscription when N exceeds the core count.\n"
+                   "  --sleep      diagnostic only: zcring consumer nanosleeps between polls\n"
+                   "               instead of spinning/yielding. Crude, not for quoted data;\n"
+                   "               see wait_backoff_sleep() in bench.c. Overrides --yield.\n"
                    "  --consumers  fan out to N consumers. zcring uses the broadcast ring\n"
                    "               (one publish, zero copies); pipe/unix use N connections\n"
                    "               and the producer writes the payload N times.\n"
@@ -303,8 +328,13 @@ int main(int argc, char **argv)
             uint32_t spins = 0;
             for (uint32_t i = 0; i < total; i++) {
                 uint64_t pos; uint32_t len; void *p;
-                if (bcast) { while (!(p = zc_bcast_acquire(&ring, id, &pos, &len))) wait_backoff(use_yield, &spins); }
-                else       { while (!(p = zc_acquire(&ring, &pos, &len)))          wait_backoff(use_yield, &spins); }
+                if (use_sleep) {
+                    if (bcast) { while (!(p = zc_bcast_acquire(&ring, id, &pos, &len))) wait_backoff_sleep(); }
+                    else       { while (!(p = zc_acquire(&ring, &pos, &len)))          wait_backoff_sleep(); }
+                } else {
+                    if (bcast) { while (!(p = zc_bcast_acquire(&ring, id, &pos, &len))) wait_backoff(use_yield, &spins); }
+                    else       { while (!(p = zc_acquire(&ring, &pos, &len)))          wait_backoff(use_yield, &spins); }
+                }
                 uint64_t sent;
                 memcpy(&sent, p, sizeof(sent));
                 if (touch) consume_payload(p, size);

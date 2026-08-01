@@ -194,6 +194,64 @@ with consumer count and this C-state cost doesn't. That's arguably a
 *stronger* scalability story than the flat 1.47× the old dataset claimed —
 it shows a genuine crossover, not just a multiplier.
 
+### Follow-up: busy-spin/power-budget hypothesis tested — NEGATIVE RESULT
+
+Hypothesis (posed independently, same day): the consumer's continuous
+busy-spin while waiting — at 1 MiB / gap=100 µs that's ~100 µs of unbroken
+max-frequency polling per message — collapses the package's turbo power
+budget and constrains uncore/memory-controller frequency, which a
+1 MiB memory-bandwidth-bound transfer depends on. Predicts the observed
+pattern: zcring penalized, unix (blocking consumer) not, and matches the
+earlier thermal finding's asymmetry (zcring degrades ~70% under heat,
+unix 0–20%).
+
+Tested it directly. Added `--sleep` to `bench.c` (`wait_backoff_sleep()`,
+`bench/bench.c`): a deliberately crude `nanosleep(1µs-requested)` between
+polls on the CONSUMER side only, replacing the spin/`--yield` loop, no
+futex. If the hypothesis were right, this should recover something close
+to the C-states-enabled ~123–133 µs figure despite its own sleep-wake
+overhead.
+
+Controlled A/B/C, 1 MiB, N=1, gap=100 µs, cool machine (`wait_for_cool()`
+before every rep), C-states disabled, 5 reps each, no poller interference.
+Raw data: `results/cstate_mechanism.csv`.
+
+| condition | p50 (ns) | mean (ns) |
+|---|---|---|
+| zcring, spin (current default) | 197905–203320 | 200121 |
+| zcring, `--sleep` (diagnostic) | 222437–227211 | **224052** |
+| unix, control | 178722–185002 | 182384 |
+
+**Sleep made it worse, not better.** It did not recover toward 123 µs —
+it landed *above* the spin baseline, further from unix than spin was.
+**This hypothesis, as tested, is not supported.**
+
+Caveat worth recording rather than glossing over: this test may not
+actually isolate what it set out to. Deep C-states are disabled at the OS
+level for the pinned CPUs regardless of *why* a core goes idle — whether
+because a thread spins-then-yields, blocks in `nanosleep()`, or blocks in
+`read()`, the cpuidle framework governing how deep that core can actually
+sleep is the same disabled framework in all three cases. So `--sleep` may
+not grant the consumer's core any access to power states it didn't already
+lack under spin — meaning this test mostly demonstrates that naive
+nanosleep-based polling adds its own overhead (~24 µs here, plausibly
+nanosleep wake-granularity on a non-RT kernel) without buying anything
+back, rather than cleanly falsifying the turbo/power-budget mechanism
+itself. A cleaner test would need a real block-and-wake primitive (futex)
+to get a qualitatively different relationship with the scheduler than
+either spin or nanosleep — which is exactly Layer 2's adaptive
+spin-then-futex notification work, not yet built.
+
+**Net status: mechanism still not identified.** Ruled out so far: offered
+rate (Open problem #1), thermal throttling in isolation (Open problem #4),
+and now naive consumer busy-spin via this negative result. What's shown to
+matter: the C-state enable/disable setting itself, cleanly and
+reproducibly (Open problem #5 above). Left as an open question for anyone
+with more time before the abstract deadline; not blocking, since the
+finding is disclosed as a trade-off in README.md regardless of mechanism.
+`--sleep` stays in `bench.c` as a diagnostic flag (not used by any
+committed sweep) in case someone picks this back up.
+
 ## Traps already hit once — do not repeat
 
 - **`--touch` is mandatory.** Without it the harness moves 8 bytes and
