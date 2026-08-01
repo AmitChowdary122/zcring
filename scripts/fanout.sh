@@ -20,18 +20,29 @@
 # The flag is a no-op for pipe/unix. Measured cost of --yield at N=1 is ~8%
 # on zcring, i.e. it is the conservative choice, not a flattering one.
 #
-# Env overrides: COUNT, GAP, SIZES, REPS, NCONS
+# Offered rate is per-size, not a flat --gap-us -- see scripts/rates.sh.
+# RATE_FRACTION (default 25, a quarter of saturating throughput) is a
+# percentage of each size's measured saturation rate; the SAME table is
+# used here as in sweep.sh, deliberately,
+# so the baseline and fan-out results are one coherent dataset rather than
+# two sweeps calibrated differently. The table itself was derived from N=1,
+# not N=4 -- see scripts/rates.sh for why N=4 cannot supply a meaningful
+# saturation point on this hardware (CPU contention alone dominates it).
+# GAP, if set, overrides the table with a flat value for ad hoc exploration.
+#
+# Env overrides: COUNT, RATE_FRACTION, GAP, SIZES, REPS, NCONS, OUT_SUFFIX
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 BENCH=build/bench
 [ -x "$BENCH" ] || { echo "build first: make"; exit 1; }
 . scripts/lib.sh
+. scripts/rates.sh
 
 mkdir -p results
-OUT=results/fanout.csv
+OUT=results/fanout${OUT_SUFFIX:-}.csv
 COUNT=${COUNT:-50000}
-GAP=${GAP:-100}
+RATE_FRACTION=${RATE_FRACTION:-25}
 REPS=${REPS:-5}
 SIZES=${SIZES:-"64 256 1024 4096 16384 65536 262144 1048576"}
 NCONS=${NCONS:-"1 2 4"}
@@ -60,6 +71,8 @@ echo >&2
 
 check_cstates
 
+echo "rate fraction: ${GAP:+GAP override=$GAP us}${GAP:-${RATE_FRACTION}% of saturation}" >&2
+
 echo "transport,consumers,size,mean_ns,p50_ns,p99_ns,p999_ns,p9999_ns,max_ns" > "$OUT"
 for n in $NCONS; do
   for size in $SIZES; do
@@ -71,11 +84,13 @@ for n in $NCONS; do
     c=$((c / n))
     [ "$c" -lt 500 ] && c=500
 
+    gap=${GAP:-$(gap_for_fraction "$size" "$RATE_FRACTION")}
+
     for rep in $(seq 1 "$REPS"); do
       for t in zcring pipe unix; do
-        printf 'N=%s %-7s size=%-8s n=%-7s rep=%s\n' "$n" "$t" "$size" "$c" "$rep" >&2
+        printf 'N=%s %-7s size=%-8s n=%-7s gap=%-6s rep=%s\n' "$n" "$t" "$size" "$c" "$gap" "$rep" >&2
         $BENCH --transport="$t" --consumers="$n" --size="$size" --count="$c" \
-               --gap-us="$GAP" --touch --yield \
+               --gap-us="$gap" --touch --yield \
                --cpu-prod="$PROD" --cpu-cons="$CONS" --csv >> "$OUT"
       done
     done

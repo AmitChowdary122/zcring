@@ -399,12 +399,28 @@ int main(int argc, char **argv)
     mean /= (double)n;
 
     if (csv) {
-        printf("%s,%d,%u,%.0f,%llu,%llu,%llu,%llu,%llu\n", t_name(transport), nc, size, mean,
-               (unsigned long long)pct(s, n, 50),
-               (unsigned long long)pct(s, n, 99),
-               (unsigned long long)pct(s, n, 99.9),
-               (unsigned long long)pct(s, n, 99.99),
-               (unsigned long long)s[n - 1]);
+        /* Two formats, not one, on purpose: sweep.sh's committed data and
+         * every downstream reader of it (including results/sweep.csv already
+         * in this repo) expect the pre-fan-out 8-column layout with no
+         * consumers field. Emitting a 9-column row unconditionally here once
+         * silently shifted every field one column to the right for the
+         * unicast baseline -- caught only because a sanity check on freshly
+         * regenerated data showed "size=1". Only --consumers callers
+         * (fanout.sh) get the extra column. */
+        if (nc_given)
+            printf("%s,%d,%u,%.0f,%llu,%llu,%llu,%llu,%llu\n", t_name(transport), nc, size, mean,
+                   (unsigned long long)pct(s, n, 50),
+                   (unsigned long long)pct(s, n, 99),
+                   (unsigned long long)pct(s, n, 99.9),
+                   (unsigned long long)pct(s, n, 99.99),
+                   (unsigned long long)s[n - 1]);
+        else
+            printf("%s,%u,%.0f,%llu,%llu,%llu,%llu,%llu\n", t_name(transport), size, mean,
+                   (unsigned long long)pct(s, n, 50),
+                   (unsigned long long)pct(s, n, 99),
+                   (unsigned long long)pct(s, n, 99.9),
+                   (unsigned long long)pct(s, n, 99.99),
+                   (unsigned long long)s[n - 1]);
     } else {
         printf("transport=%-7s consumers=%-3d size=%-8u n=%zu\n",
                t_name(transport), nc, size, n);
