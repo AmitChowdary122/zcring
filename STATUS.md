@@ -111,6 +111,20 @@ a different thing and is valid.
 - **Benchmarks at a saturating offered rate are not like-for-like.** A 64 MiB
   ring converts overload into queueing delay; a 200 KB socket buffer converts
   it into backpressure. Establish the saturation point first.
+- **`cpupower idle-set -D 0` is not sticky across reboots, and a "fixed"
+  machine can still show a polluted tail.** Confirmed this again 1 Aug 2026
+  (2nd session, same day): after a reboot C-states were back to default
+  (`powersave`, C3 enabled). Re-ran the before/after pair — before matched
+  the known signature (p99.9 mean 579.9 µs, range 188.2 µs – 1.94 ms over 5
+  reps). The *first* after-attempt still showed p99.9 in the tens-to-hundreds
+  of µs, which looked like the fix hadn't worked — the actual cause was
+  Firefox and other GUI processes competing for the pinned producer core
+  (`--cpu-prod=2`). Killing Firefox and re-running gave the expected result
+  (p99.9 mean 1.04 µs, range 0.96–1.18 µs). **Always check `ps -eo psr,comm`
+  against the pinned CPUs before trusting an "after" number that doesn't
+  match expectations — don't conclude the hypothesis is wrong before ruling
+  out machine noise.** Full table now also in README.md's determinism
+  section.
 
 ## Next steps, in order
 

@@ -1,0 +1,16 @@
+condition,transport,consumers,size,mean_ns,p50_ns,p99_ns,p999_ns,p9999_ns,max_ns
+cstates_enabled_powersave,zcring,1,64,570,114,382,188240,488013,525096
+cstates_enabled_powersave,zcring,1,64,5292,115,470,1936732,2836314,2936176
+cstates_enabled_powersave,zcring,1,64,570,114,425,189926,489728,512947
+cstates_enabled_powersave,zcring,1,64,847,113,399,339585,739323,939316
+cstates_enabled_powersave,zcring,1,64,642,113,372,244771,544703,607870
+cstates_disabled_performance_quiet,zcring,1,64,150,119,417,1026,4440,68684
+cstates_disabled_performance_quiet,zcring,1,64,147,120,421,968,2787,10073
+cstates_disabled_performance_quiet,zcring,1,64,150,119,419,959,16840,18962
+cstates_disabled_performance_quiet,zcring,1,64,146,119,422,1084,4061,5494
+cstates_disabled_performance_quiet,zcring,1,64,153,119,447,1183,16262,25747
+cstates_disabled_performance_firefox_noise,zcring,1,64,467,119,422,46476,523506,546440
+cstates_disabled_performance_firefox_noise,zcring,1,64,658,119,439,222856,522735,591000
+cstates_disabled_performance_firefox_noise,zcring,1,64,563,121,463,160482,538149,560243
+cstates_disabled_performance_firefox_noise,zcring,1,64,513,119,421,134623,480730,534482
+cstates_disabled_performance_firefox_noise,zcring,1,64,601,119,423,201356,501185,554668

@@ -124,15 +124,45 @@ copy-based transport pays N copies; zcring pays none. The single-consumer
 That is the measurement to build, and it is also what the *scalability*
 criterion in the rubric is asking for.
 
-### p99.9 is not yet quotable
+### p99.9 is quotable with deep C-states disabled; p99.99 is not yet
 
-Tail latency currently varies by three orders of magnitude across identical
-repetitions (zcring at 64 B ranged 997 ns – 1.18 ms over 5 reps). All three
-transports show it, so it is OS scheduling noise on a non-isolated, non-RT
-kernel — not a ring defect. **Do not quote any p99.9 figure until the
-`isolcpus` / `nohz_full` / PREEMPT_RT work is done.** That work is the top
-differentiator in the plan precisely because the problem statement asks for
-*deterministic* communication.
+Tail latency at 64 B, N=1 varied by three orders of magnitude across
+identical repetitions before the cause was identified: deep C-state entry.
+The idle governor (`menu`) predicts sleep length from recent history and, at
+a 100 µs producer gap, sometimes guesses long enough to pick `C3_ACPI`.
+Waking from it costs the state's exit latency, and that cost lands directly
+in the tail:
+
+| state | exit latency |
+|---|---|
+| POLL | 0 µs |
+| C1_ACPI | 1 µs |
+| C2_ACPI | 253 µs |
+| C3_ACPI | 1048 µs |
+
+Measured effect, zcring 64 B / N=1 / count=20,000, 5 reps, on the
+i3-1115G4 (bare metal), producer and consumer pinned to distinct physical
+cores:
+
+| condition | p99.9 mean | p99.9 range |
+|---|---|---|
+| C-states enabled (`powersave`, default) | 579.9 µs | 188.2 µs – 1.94 ms |
+| `cpupower idle-set -D 0` + `performance` governor, quiet machine | **1.04 µs** | 0.96 µs – 1.18 µs |
+
+The result is not just a lower mean — the **variance collapses**. Before,
+p99.9 depended on whether the governor happened to enter C3 during that
+particular run; after, it is consistently sub-2-µs. Confirmed twice
+(2026-08-01): the first attempt after disabling C-states still showed tails
+in the tens-to-hundreds-of-µs range because Firefox and other GUI processes
+were competing for the pinned producer core — a reminder that "quiet the
+machine" in the benchmarking checklist is load-bearing, not boilerplate.
+
+**Do quote p99.9 at N=1 with deep C-states disabled.** p99.99 and max still
+show occasional excursions into the tens/hundreds of µs — a smaller,
+separate noise source, most likely IRQ or scheduling jitter, that the
+`isolcpus` / `nohz_full` / PREEMPT_RT work is meant to close. C-state
+disabling is a precondition for that work to be measurable, not a
+replacement for it. See `RUNNING.md` §4a for the full procedure.
 
 ## Known gaps
 

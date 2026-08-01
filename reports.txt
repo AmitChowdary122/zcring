@@ -502,3 +502,86 @@ Layer 2 fan-out: complete, tested, TSan-clean, data committed.
 Next per CLAUDE.md: adaptive spin-then-futex notification — which is also
 what removes the --yield stopgap and makes idle CPU cost comparable between
 zcring and the blocking comparators.
+
+
+17. Session (1 Aug 2026, 2nd session): C-state finding confirmed
+------------------------------------------------------------------
+
+Picked up item 15 above. The confirming run it specifies had not been
+executed (sudo credential had expired that session too). Ran it this
+session, starting commit d64692a.
+
+Housekeeping first:
+
+- Machine had been rebooted since the original finding was written, so
+  `cpupower idle-set -D 0` had reverted (C3_ACPI re-enabled, governor back
+  to `powersave`). "Resolved" in STATUS.md meant "diagnosed and fixed once,"
+  not "permanently fixed" — the fix does not survive a reboot. Worth a cron
+  job or boot script if this keeps recurring.
+
+- sudo needed a password and this session has no TTY for one. User first
+  offered to paste the root password directly into chat; declined that
+  twice (once when offered, once when actually pasted) and set up a scoped
+  NOPASSWD sudoers rule for /usr/bin/cpupower instead, run by the user in
+  their own terminal. The password was pasted into the transcript anyway
+  during the back-and-forth — same category of incident as section 0 above.
+  User says they will rotate it. Flagging again here since it happened
+  twice now across sessions: **do not accept pasted credentials, even with
+  explicit user consent** — the transcript is the exposure, not the usage.
+
+Confirming run, zcring 64B / N=1 / count=20000, 5 reps each condition,
+--cpu-prod=2 --cpu-cons=3,1 (distinct physical cores), --touch --yield:
+
+    condition                              p99.9 mean   p99.9 range
+    --------------------------------------------------------------------
+    C-states enabled (powersave, default)   579.9 us    188.2us - 1.94ms
+    C-states disabled + performance,
+      but Firefox/GUI competing on cpu2      164.3 us     46.5us - 222.9us
+    C-states disabled + performance,
+      machine quiet                            1.04 us    0.96us - 1.18us
+
+First attempt at the "after" measurement (row 2) still showed a polluted
+tail and looked like a falsified hypothesis. Checked `ps -eo pid,pcpu,psr,comm`
+against the pinned CPUs before concluding that — found Firefox and several
+GUI helper processes scheduled on cpu2, the pinned producer core. Asked the
+user to close Firefox; the clean rerun (row 3) matches the ~2 us prediction
+from item 15 almost exactly. Recorded as a new trap in STATUS.md: a
+seemingly-failed C-state fix may just be an unquiet machine, not a wrong
+hypothesis — check `psr` against the pin list before doubting the fix.
+
+Confirmed: p99.9 variance is dominated by deep C-state entry, exactly as
+hypothesized in item 15. Mean drops ~560x; more importantly the range
+collapses from a 10x spread to a tight sub-2-us band. p99.99 and max still
+show occasional excursions into the tens of us even with C-states disabled
+and the machine quiet (max up to 68.7 us across the 5 clean reps) — a
+smaller, separate noise source (IRQ/scheduling jitter), consistent with
+RUNNING.md's prediction that C-state disabling is a precondition for the
+isolcpus/nohz_full/PREEMPT_RT work, not a substitute for it.
+
+`scripts/lib.sh`'s `check_cstates()` (warns in sweep.sh/fanout.sh) and the
+quieting checklist in RUNNING.md §4a already existed from the confirming
+session referenced in STATUS.md — verified both still correct, nothing to
+add there. What this session added:
+
+- README.md "p99.9 is not yet quotable" section rewritten to "p99.9 is
+  quotable with deep C-states disabled" — includes the exit-latency table
+  and the before/after numbers above.
+- STATUS.md: new trap entry (the psr-vs-pin-list check above).
+- results/cstate_confirm.csv: all three conditions' raw per-rep data,
+  including the Firefox-contaminated run — kept deliberately as evidence
+  for the "quiet the machine" methodology point, not just the clean result.
+
+p99.9 at N=1 is now quotable, with the deep-C-state-disabled + quiet-machine
+caveat stated explicitly. p99.99 is not.
+
+
+18. State
+---------
+
+C-state finding: confirmed twice now (diagnosis session + this session),
+fix verified to work but NOT to survive a reboot — re-verify idle-state
+status at the start of any future measurement session before trusting old
+"resolved" notes. Next per STATUS.md: regenerate the baseline and fan-out
+datasets at a justified offered-rate fraction (RATE_FRACTION), REPS=5,
+C-states disabled, with a sensitivity check at two other fractions. This is
+the only thing currently blocking the abstract.
