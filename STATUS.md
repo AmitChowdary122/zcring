@@ -286,19 +286,24 @@ committed sweep) in case someone picks this back up.
 
 ## Next steps, in order
 
-1. **Regenerate both datasets at `RATE_FRACTION=25`**, REPS=5, C-states
-   disabled — baseline and fan-out. Add a sensitivity check at two other
-   fractions. Update README.md tables and delete the superseded ones.
-   *Sonnet.* This is the only thing blocking the abstract.
-2. Optional but recommended: live-USB scaling run on the Ryzen for N=8.
+1. ~~Regenerate both datasets at `RATE_FRACTION=25`, REPS=5, C-states
+   disabled — baseline and fan-out. Sensitivity check at two other
+   fractions. Update README.md tables, delete superseded ones.~~ **Done**,
+   same-day follow-up session — see Open problems #1, #4, #5.
+2. ~~Demo/pipeline.~~ **Done**, follow-up session — see "Demo pipeline
+   results" below.
+3. Optional but recommended: live-USB scaling run on the Ryzen for N=8.
    *Sonnet.* Do this only if the abstract will claim scaling beyond N=2.
-3. **Draft the abstract.** Target submission 8–10 Aug; window closes 25 Aug.
-   *Opus.*
-4. Adaptive spin-then-futex notification — removes the `--yield` stopgap and
-   makes idle CPU cost comparable to the blocking comparators. *Opus, and
-   only after the abstract.*
-5. Producer crash recovery; determinism rigor (isolcpus / nohz_full /
-   PREEMPT_RT); iceoryx and ZeroMQ comparators; demo; presentation.
+4. **Draft the abstract.** Target submission 8–10 Aug; window closes 25 Aug.
+   *Opus.* Nothing is blocking this now — see "The story the abstract
+   should tell" below for the numbers to use.
+5. Adaptive spin-then-futex notification — removes the `--yield` stopgap,
+   makes idle CPU cost comparable to the blocking comparators, and (per
+   Open problem #5's negative result) is the only remaining way to test
+   the busy-spin/power-budget hypothesis properly. *Opus, and only after
+   the abstract.*
+6. Producer crash recovery; determinism rigor (isolcpus / nohz_full /
+   PREEMPT_RT); iceoryx and ZeroMQ comparators; presentation.
 
 `reports.txt` holds the full Layer 1 and Layer 2 session reports, including
 the fan-out design rationale and the bufferbloat analysis in §12. Note that
@@ -315,11 +320,81 @@ context.
 
 ## The story the abstract should tell
 
-Syscall-free small-message latency (18.8× at 64 B, 7.8× at 1 KiB) for
-embedded real-time control traffic, with an advantage that *multiplies with
-consumer count* (256 KiB: 1.09× at N=1 → 2.47× at N=4) because publication is
-one release store regardless of N while copy-based transports pay N copies
-each way.
+**Stale as of the same-day follow-up session — numbers below are current;
+do not use anything from before today.**
 
-State the large-payload single-consumer convergence (1.1–1.5×) yourself
-before a judge finds it. Do not lead with a bandwidth multiplier.
+Syscall-free small-message latency (19.6× at 64 B, 10.0× at 1 KiB) for
+embedded real-time control traffic. State the large-payload trade-off
+yourself before a judge finds it: at N=1, zcring *loses* to a UNIX socket
+at 256 KiB–1 MiB (0.68×–0.84×), a real, disclosed cost of the C-state
+configuration the small-message determinism claim requires (see README.md
+"Why large payloads lose here", STATUS.md Open problem #5).
+
+Then show the fan-out crossover, which is the more interesting scalability
+story precisely because it isn't a flat multiplier: at 1 MiB, the same 0.82×
+loss at N=1 becomes a 1.38× win at N=2 and a 2.03× win at N=4, because
+publication is one release store regardless of N while copy-based
+transports pay a full extra copy per additional consumer. The demo pipeline
+(`make demo`, see below) makes this concrete and live rather than only a
+table: a real 30fps camera-shaped workload, ten minutes, zero drops, flat
+memory, 30.9 GB of traffic avoided.
+
+## Demo pipeline results (`make demo`)
+
+Built same-day, follow-up session. `demo/pipeline.c`: one producer
+synthesises 640×480 grayscale frames at 30fps; three consumers
+(edge-count, jitter-tracker, checksum) each process every frame in full
+(all touch every pixel — no consumer gets to look cheap by ignoring most
+of the frame); live terminal dashboard; `--transport=zcring|unix` runs the
+identical pipeline over both transports. `scripts/demo.sh` reuses
+`check_cstates` from `scripts/lib.sh` and computes CPU pinning the same
+way the sweep scripts do.
+
+**Ten-minute validation run, both transports, `DURATION=600`:**
+
+| | zcring | unix (comparator) |
+|---|---|---|
+| frames published | 18,000 / 18,000 target | 18,000 / 18,000 target |
+| average fps | exactly 30.000 (zero drift) | exactly 30.000 (zero drift) |
+| drops (any consumer, whole run) | 0 | 0 |
+| producer RSS, steady state | 155,808 KB | 2,188 KB |
+| consumer RSS, steady state (total, 3 procs) | 461,780 KB (~154,000 each) | 2,996 KB (~999 each) |
+| RSS trend over 10 min | flat from ~t=60s (first ring wrap) onward — 12 samples, identical after the first two | flat throughout, all 13 samples identical — no 150 MB ring to page in |
+| p50/p99 latency, end of run | edge-count 708/738µs, jitter 119/130µs, checksum 599/631µs | edge-count 598/643µs, jitter 377/443µs, checksum 782/1103µs |
+| memory traffic avoided vs sockets | **30.90 GB** over the run | n/a (this is the baseline) |
+
+zcring's jitter consumer is markedly faster than unix's (119µs vs 377µs
+p50) despite doing identical work (full-frame min/max scan) — with a
+307 KB frame, the kernel-copy cost is a much bigger fraction of a
+light-processing consumer's total latency than of a heavy one
+(checksum's gap is smaller: 599 vs 782µs), consistent with the syscall/copy
+overhead being closer to fixed-cost and the processing being the variable
+that dilutes it.
+
+zcring's RSS is dominated by the shared ring (512 slots × ~307 KB frame ≈
+150 MiB), fully paged in by every process once the ring has wrapped once
+(~17s at 30fps) — that is expected, bounded, shared-mapping behavior, not
+a leak, and it is why the per-process RSS is roughly identical across the
+producer and all three consumers (they're mapping the same memfd).
+
+**Bug found and fixed during validation, worth remembering:** the first
+version hung forever if the producer died any way other than a caught
+signal. `SIGKILL`-testing this directly (not just trusting the design)
+found it: consumers spun on an empty ring with no way to learn the
+producer was gone, because `g_stop` is a per-process flag that a duration-
+elapsed exit never sets in the children, and only a caught signal
+(SIGINT/SIGTERM) does. Fixed two ways: (1) the producer explicitly sends
+SIGTERM to all consumers on any exit path, not just signal-driven ones;
+(2) an orphan watchdog in the consumer's wait loop, checked once per
+`sched_yield()` — but comparing `getppid()` against the PID captured
+*right after fork*, not against the literal value `1`. This environment
+reparents orphans to a subreaper rather than to init, so the common
+`getppid() == 1` idiom would have silently never fired here. Verified by
+`SIGKILL`-ing the producer directly mid-run and confirming all three
+consumers exit within seconds, no leaked processes.
+
+Raw soak-test sample logs (RSS + frame count every 45s, both transports,
+full 10 minutes) are not committed as CSVs — this is a live-monitoring
+tool, not a quoted-latency benchmark — but the methodology and final
+numbers above are reproducible via `DURATION=600 make demo` and
+`DURATION=600 TRANSPORT=unix make demo`.
