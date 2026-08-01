@@ -585,3 +585,190 @@ status at the start of any future measurement session before trusting old
 datasets at a justified offered-rate fraction (RATE_FRACTION), REPS=5,
 C-states disabled, with a sensitivity check at two other fractions. This is
 the only thing currently blocking the abstract.
+
+
+19. Task 2 (same session): offered-rate regen led to a bigger find --
+    thermal throttling, not offered rate, was the real confound
+------------------------------------------------------------------------
+
+Started the item-18 regen: `REPS=5 RATE_FRACTION=25 ./scripts/sweep.sh`.
+Result looked wrong immediately -- at 1 MiB, zcring (209.7us) lost to unix
+(162.1us), a straight reversal of the established 1.1-1.5x zcring win. The
+reversal started at 64 KiB.
+
+First hypothesis: sweep.sh's baseline path has no --yield, so zcring's
+consumer busy-spins the entire producer gap, and the new per-size table
+uses a much longer gap at 1 MiB (2000us) than the old flat default
+(100us) -- 20x longer sustained spin per message. Tested directly:
+1 MiB, N=1, --cpu-prod=2 --cpu-cons=3, 3 reps each --
+
+    condition                          zcring p50
+    ---------------------------------------------
+    gap=100,  no --yield (old rate)      216.4us
+    gap=2000, no --yield (new rate)      210.4us
+    gap=2000, --yield                    209.2us
+    gap=100,  --yield                    215.6us
+
+Flat across all four -- gap and --yield explain essentially nothing.
+Hypothesis rejected.
+
+Second hypothesis, found by checking `cat /sys/class/thermal/thermal_zone*/
+temp`: thermal throttling. x86_pkg_temp and TCPU both read 97-100C (this
+part's throttle point), and `cat cpu*/thermal_throttle/*_throttle_count`
+showed large nonzero counts. Mechanism: this chip has 2 physical cores.
+cpu1/cpu3 are one SMT pair, cpu0/cpu2 the other -- confirmed via
+thread_siblings_list (section 2 above). P-state is shared per physical
+core, not per logical CPU, so disabling C-states on the two PINNED
+benchmark CPUs (2 and 3, per section 4a's fix) keeps BOTH physical cores
+continuously active for as long as the session runs, with no idle state
+available on either sibling of either pinned core. That is a low-TDP
+embedded-class chip with no fan headroom to spare; it heat-soaks into
+throttling within tens of minutes of continuous benchmarking.
+
+Confirmed directly: re-enabled C-states everywhere, waited for package temp
+to drop from 87C to 54C (Monitor loop, ~2 min), then re-ran the ORIGINAL
+config (1 MiB, N=1, gap=100us, no --yield, C-states enabled) --
+
+    zcring p50: 122.7us, 122.8us, 123.1us   (mean 122.9us)
+    unix   p50: 161.4us, 162.3us, 160.6us   (mean 161.4us)
+
+Matches the historical 123us claim almost exactly. Watched temp climb
+54C -> 74C -> 79C over just those 6 runs (3000 msgs x 2 transports) --
+confirms the heat-soak is fast, not a one-time artifact from a long prior
+session.
+
+Checked this against the sweep just run (results/sweep.csv, now known
+contaminated, kept for the record rather than deleted): degradation vs. the
+historical per-size numbers is progressive -- 64B/256B close to history,
++41% by 16-64 KiB, +62% at 256 KiB, +70% at 1 MiB. sweep.sh iterates sizes
+ascending (small to large), so heat accumulates monotonically right into
+the sizes that matter most for the large-payload story. zcring degrades
+much more than unix under heat (~70% vs ~0-20%) because its consumer
+busy-spins the whole gap, generating its own heat, where unix blocks in
+read() and doesn't. This is a second, independent cost of the missing
+adaptive-notification work (STATUS.md next-steps item 4/CLAUDE.md item 1),
+beyond the already-documented idle-CPU-fairness one.
+
+This likely also explains part of the ORIGINAL three-way 1.47x/1.38x/2.32x
+inconsistency (STATUS.md open problem #1, section 15 above) -- thermal
+state was an uncontrolled variable in all three of those runs too, not
+just offered rate and unicast-vs-broadcast path.
+
+Fix built: `scripts/lib.sh` gained `wait_for_cool()` -- finds the
+x86_pkg_temp (falling back to TCPU) thermal zone, blocks until it drops
+under THERMAL_LIMIT_C (default 60C, 300s max wait then warns and continues
+rather than hanging forever) before each payload size. Both sweep.sh and
+fanout.sh call it once per size, right after computing that size's gap.
+Documented as RUNNING.md #4b, with a new sanity-check table row. The
+contaminated sweep.csv is being regenerated now with the gate active
+before any dataset gets written into README.
+
+Net effect on the plan: item 18's offered-rate work isn't finished, it
+gained a precondition. The RATE_FRACTION methodology itself (scripts/
+rates.sh) is very likely still fine -- the earlier coarse gap-bisection
+found no knee at N=1 for any size, which is consistent with gap genuinely
+not mattering much at N=1 (as the four-way test above reconfirmed). What
+was missing was thermal control, not rate control. Both are now handled;
+dataset regen continues.
+
+
+20. State
+---------
+
+C-state finding: confirmed, documented, doesn't survive a reboot (item 18).
+Thermal throttling: confirmed, root-caused (SMT P-state sharing on a
+2-physical-core part), gated in both sweep scripts (item 19). Offered-rate
+regen (STATUS.md's blocking item) is in progress with the thermal gate
+active. Once the primary-rate (RATE_FRACTION=25) baseline and fan-out
+sweeps are clean, remaining work per STATUS.md: sensitivity check at two
+other fractions, README table update with superseded numbers deleted, raw
+CSVs committed.
+
+
+21. The thermal gate needed two more fixes before it actually worked
+----------------------------------------------------------------------
+
+First revision (item 19) gated once per payload SIZE, before that size's
+15-run block (5 reps x 3 transports). Not fine-grained enough: watched the
+package reheat from a gated-cool 59C back to 97C+ WITHIN a single size's
+block, so later reps in that block were measured hot regardless of the gate
+having fired at the start. Fixed by moving the wait_for_cool() call inside
+the innermost loop, before every single bench invocation, not once per size.
+
+Second problem, more fundamental: with the fix above in place, watched the
+package temperature during an idle wait (no bench running, C-states still
+disabled on the pinned CPUs) and it did NOT converge toward the ~54C
+baseline seen earlier -- it oscillated 74-81C over a full 60s of doing
+nothing. Root cause: with C-states disabled, the pinned cores have no idle
+state left to cool INTO at all; the wait loop was checking a temperature
+that could never drop below that floor, so it would always burn the full
+THERMAL_MAX_WAIT_S and give up, silently disabling the gate every single
+time it fired. Confirmed by explicitly re-enabling C-states (`cpupower -c
+0-3 idle-set -E`) and re-checking: temp dropped from 84C to 54C in 125s.
+Fixed wait_for_cool() to temporarily re-enable C-states system-wide during
+the wait (letting the package actually reach a low baseline), then
+re-disable them before returning control to the caller, guarded by a
+passwordless-sudo check (warns and waits at whatever floor is reachable if
+sudo isn't set up, rather than hanging or erroring).
+
+With both fixes, the primary baseline sweep (REPS=5, RATE_FRACTION=25, 8
+sizes, gated) completed cleanly. Gate fires on nearly every invocation even
+at small sizes (the package heats from constant max-frequency spin
+regardless of payload size, not primarily from data volume -- a refinement
+of item 19's "hits large payloads hardest" framing, which undersold it:
+the driver is CONTINUOUS SPIN TIME with C-states disabled, size-independent,
+though larger payloads still generate additional heat on top). Individual
+gate waits ranged 5-60s once past the first cold start.
+
+
+22. A third, non-thermal cause: disabling C-states costs zcring ~65% at
+    1 MiB, independent of heat and offered rate
+--------------------------------------------------------------------------
+
+With the gate working correctly, results/sweep.csv still showed zcring
+losing to unix at 256 KiB (0.68x) and 1 MiB (0.84x). This is NOT a residue
+of items 19 or 21 -- both thermal state and offered rate were controlled
+for at this point.
+
+Isolated with a clean A/B, 1 MiB, N=1, gap=100us, cool machine, no
+poller/other interference (a first attempt at this comparison was itself
+contaminated by an unpinned frequency-polling loop competing for the
+pinned CPUs -- caught by removing the poller and reproducing cleanly):
+
+    C-states enabled:   122.9, 128.4, 133.0 us   (matches historical 123us)
+    C-states disabled:  217.2, 198.8, 202.1 us   (~65% higher)
+
+pipe/unix are NOT similarly penalized (unix, if anything, was marginally
+FASTER disabled: 152-162us either way) -- this rules out a generic
+"disabling idle states costs everyone" explanation and points at something
+specific to zcring's busy-spin consumer. Attempted to pin down the exact
+mechanism with turbostat (per-core frequency / idle-residency tracing,
+needed a second sudoers extension) but the user redirected to finish the
+dataset regen rather than keep chasing the microarchitectural root cause --
+recorded as unresolved mechanism, resolved (disclosed) finding.
+
+User decision: keep C-states disabled uniformly across all payload sizes
+(the honest, determinism-first config this problem statement actually asks
+for) rather than splitting methodology by size to preserve the old
+large-payload numbers. Report the loss as a disclosed trade-off in
+README.md rather than engineer around it.
+
+Silver lining: fan-out data shows this is an N=1-only effect. At 1 MiB,
+zcring loses at N=1 (0.82x) but the zero-copy fan-out advantage (flat
+per-consumer cost vs. pipe/unix paying a full extra copy per consumer)
+overcomes it fast -- wins at N=2 (1.38x), wins big at N=4 (2.03x). This
+reframes the large-payload story as a genuine crossover rather than a flat
+multiplier, which is arguably a stronger scalability argument for the
+rubric than the old flat 1.47x figure was.
+
+README.md rewritten: results table updated to the new gated dataset, new
+"Offered rate" methodology section, new "Why large payloads lose here"
+section (the C-state trade-off, disclosed with the A/B table above), new
+"Fan-out results" section with the crossover table. Old 1.47x/1.38x/2.32x
+figures and the prior VM-derived "~2x floor" / bare-metal "1.1x floor"
+corrections removed rather than left alongside the new numbers.
+
+Primary-rate (RATE_FRACTION=25) baseline and fan-out sweeps: done, clean,
+committed to results/sweep.csv and results/fanout.csv. Sensitivity sweeps
+at RATE_FRACTION=10 and 50 (reduced scope: REPS=3, sizes 64B/4KiB/1MiB, for
+both scripts) running in background as this is written.

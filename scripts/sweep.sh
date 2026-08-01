@@ -74,6 +74,7 @@ for size in $SIZES; do
 
   for rep in $(seq 1 "$REPS"); do
     for t in zcring pipe unix; do
+      wait_for_cool
       printf 'running %-7s size=%-8s n=%-7s gap=%-6s rep=%s\n' "$t" "$size" "$n" "$gap" "$rep" >&2
       $BENCH --transport="$t" --size="$size" --count="$n" \
              --gap-us="$gap" --touch $PIN --csv >> "$OUT"

@@ -25,3 +25,86 @@ check_cstates() {
         echo "         fix: sudo cpupower idle-set -D 0   (see RUNNING.md #4a)" >&2
     fi
 }
+
+# Wait for package temperature to drop below a safe threshold before
+# starting the next payload size.
+#
+# Why this exists: this part has only 2 physical cores, and each pinned
+# benchmark CPU (2, 3) is the SMT sibling of an unused logical CPU (0, 1
+# respectively) -- P-state is shared per physical core, not per logical
+# CPU, so disabling C-states on the pinned CPUs (required by check_cstates
+# above, for the small-payload tail-latency fix) keeps BOTH physical cores
+# continuously active for as long as the session runs, even between
+# benchmark invocations. On this low-TDP embedded-class chip that heat-soaks
+# the package into thermal throttling within tens of minutes, and it hits
+# large payloads hardest because they take longer to run and zcring's
+# busy-spin consumer generates its own heat while waiting (unix/pipe block
+# instead). Confirmed 2026-08-01: package cool (54C) vs throttling (97-100C)
+# gave zcring p50 at 1 MiB of 123us vs 210-217us for the IDENTICAL config --
+# a bigger, more consistent effect than any offered-rate change tested, and
+# it explains why sweep.sh's default ascending size order (small to large)
+# was quietly degrading exactly the sizes that matter most for the
+# large-payload story. See reports.txt for the investigation and
+# README.md's determinism section for the numbers.
+THERMAL_LIMIT_C=${THERMAL_LIMIT_C:-60}
+THERMAL_MAX_WAIT_S=${THERMAL_MAX_WAIT_S:-300}
+
+pkg_temp_zone() {
+    local z t
+    for z in /sys/class/thermal/thermal_zone*/; do
+        t=$(cat "$z/type" 2>/dev/null)
+        [ "$t" = "x86_pkg_temp" ] && { echo "$z"; return 0; }
+    done
+    for z in /sys/class/thermal/thermal_zone*/; do
+        t=$(cat "$z/type" 2>/dev/null)
+        [ "$t" = "TCPU" ] && { echo "$z"; return 0; }
+    done
+    return 1
+}
+
+wait_for_cool() {
+    local zone millideg tempc waited=0 reenabled=0
+    zone=$(pkg_temp_zone) || {
+        echo "warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate" >&2
+        return 0
+    }
+    millideg=$(cat "${zone}temp" 2>/dev/null) || return 0
+    tempc=$((millideg / 1000))
+    [ "$tempc" -lt "$THERMAL_LIMIT_C" ] && return 0
+
+    echo "thermal gate: package at ${tempc}C, waiting for <${THERMAL_LIMIT_C}C..." >&2
+
+    # Measured directly (2026-08-01): with C-states disabled on the pinned
+    # CPUs, the package plateaus in the mid-70s to low-80s C and does NOT
+    # converge further -- it oscillated 74-81C over 60s of idle wait with no
+    # bench running. That's because disabling C-states removes the ONLY way
+    # these cores can actually go low-power; there's nothing left to cool
+    # into. So the wait has to temporarily UNDO the C-state disable to let
+    # the package actually cool, then redo it before handing control back to
+    # the caller -- otherwise this loop just burns THERMAL_MAX_WAIT_S and
+    # gives up every single time, silently disabling the gate.
+    if sudo -n cpupower idle-set -E >/dev/null 2>&1; then
+        reenabled=1
+    else
+        echo "warning: no passwordless sudo for cpupower; cannot re-enable C-states to cool," >&2
+        echo "         waiting at whatever floor is reachable with them disabled instead" >&2
+    fi
+
+    while [ "$tempc" -ge "$THERMAL_LIMIT_C" ]; do
+        if [ "$waited" -ge "$THERMAL_MAX_WAIT_S" ]; then
+            echo "warning: still ${tempc}C after ${waited}s, giving up and continuing anyway" >&2
+            echo "         (results for this size may be thermally degraded)" >&2
+            break
+        fi
+        sleep 5
+        waited=$((waited + 5))
+        millideg=$(cat "${zone}temp" 2>/dev/null) || break
+        tempc=$((millideg / 1000))
+    done
+
+    if [ "$reenabled" -eq 1 ]; then
+        sudo -n cpupower idle-set -D 0 >/dev/null 2>&1
+    fi
+    [ "$waited" -gt 0 ] && echo "thermal gate: at ${tempc}C after ${waited}s, C-states redisabled, continuing" >&2
+    return 0
+}

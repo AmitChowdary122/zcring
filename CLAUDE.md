@@ -72,27 +72,45 @@ takes the credibility of everything adjacent with it.
 `scripts/sweep.sh` now passes `--touch` unconditionally. Do not add an escape
 hatch.
 
-### Claims that are defensible (measured bare metal, 1 Aug 2026)
+### Claims that are defensible (measured bare metal, gated regen, 1 Aug 2026)
 
 - Removes the **syscall from the data path** entirely.
 - Eliminates **two of four memory passes**, but note this does *not* yield 2×
   at large payloads — see below.
-- **64 B: 18.8× vs pipe. 1 KiB: 7.8×. 4 KiB: 3.5×.** Small-message latency is
-  the real story, and it is the regime embedded real-time control lives in.
-- **Large payloads converge to 1.1–1.5× vs a UNIX socket**, because at that
-  point you are memory-bandwidth bound and the kernel's `memcpy` is very well
-  optimised.
+- **64 B: 19.6× vs pipe. 1 KiB: 10.0×. 4 KiB: 3.66×.** Small-message latency
+  is the real story, and it is the regime embedded real-time control lives in.
+- **Large payloads (256 KiB–1 MiB) LOSE to a UNIX socket at N=1** (0.68×–
+  0.84×), under the C-state-disabled configuration this project requires for
+  the small-message determinism claim below. Confirmed independent of
+  thermal state and offered rate — a real, disclosed trade-off, not a bug or
+  measurement artifact. See README.md's "Why large payloads lose here".
+- **Fan-out wins the large-payload case back, decisively, from N=2 on.** At
+  1 MiB: 0.82× at N=1, 1.38× at N=2, 2.03× at N=4 — zcring's per-consumer
+  cost stays flat while pipe/unix pay a full extra copy per consumer. A
+  genuine crossover, which is a stronger scalability story than a flat
+  multiplier would have been.
 
-**An earlier version of this file claimed a "~2× floor" at 1 MiB. That came
-from VM data and is wrong — bare metal measures 1.1×.** Do not reinstate it.
+**Two earlier versions of this file made claims that did not survive
+follow-up measurement.** First a "~2× floor" at 1 MiB (VM data, wrong on
+bare metal). Then the "1.1–1.5× large-payload win" that replaced it turned
+out to be measured under a C-state configuration that predates and
+conflicts with the tail-latency fix below — under the correct,
+determinism-first configuration, large payloads *lose* at N=1. Do not
+reinstate either. Current numbers come from `results/sweep.csv` /
+`results/fanout.csv`, regenerated with thermal gating and a justified
+per-size offered rate (`RATE_FRACTION`) — see README.md for the full
+methodology and sensitivity check.
 
 **Lead with small-message latency, not with a bandwidth multiplier.** State
-the large-payload convergence yourself before a judge finds it; then show
-fan-out, which is where the large-payload case is genuinely won (N consumers
-= N copies avoided, so the advantage grows linearly with N).
+the large-payload trade-off yourself before a judge finds it; then show
+fan-out, which is where the large-payload case is genuinely won back (N
+consumers = N copies avoided, so the advantage grows with N and crosses
+from a loss at N=1 to a 2×+ win by N=4).
 
-**p99.9 is not quotable yet** — varies 1000× across identical reps due to OS
-scheduling noise on a non-isolated kernel. Needs the isolcpus/RT work first.
+**p99.9 is quotable at N=1 with deep C-states disabled** (1.04 µs mean,
+sub-2 µs range — see README.md). p99.99 is not yet; still shows occasional
+excursions from a smaller, separate noise source (IRQ/scheduling jitter),
+which the isolcpus/nohz_full/PREEMPT_RT work is meant to close.
 
 ## Machines
 

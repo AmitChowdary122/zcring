@@ -15,7 +15,7 @@ code, and that a fresh session will otherwise get wrong.
   producers, determinism rigor (isolcpus / nohz_full / PREEMPT_RT), iceoryx
   and ZeroMQ comparators, demo, presentation.
 
-## Open problem #1 — the offered-rate inconsistency (BLOCKS THE ABSTRACT)
+## Open problem #1 — the offered-rate inconsistency — RESOLVED, same-day follow-up session
 
 The same nominal configuration (1 MiB, one consumer) currently has three
 different published ratios in this repo:
@@ -27,30 +27,39 @@ different published ratios in this repo:
 | Fan-out unsaturated | 2000 µs | 107.8 µs | 250.0 µs | **2.32×** |
 
 The third is the most flattering and the least safe. `unix` got *slower* when
-offered load was *reduced*, which is backwards until you account for cache
-temperature: at 2000 µs spacing the buffers go cold between messages, so
-copy-based transports pay full cache-miss cost on every copy while zcring's
-single pass is less exposed.
+offered load was *reduced*, which was originally attributed to cache
+temperature (copy-based transports pay full cache-miss cost on every copy
+once buffers go cold between messages). **That explanation is now believed
+incomplete — see the update below.** Thermal throttling was an uncontrolled
+variable across all three runs and is likely a bigger contributor than cache
+temperature was.
 
 **The effect is real, but it means the headline large-payload ratio is a
 function of message rate.** Quoting 2.32× invites a judge to rerun at a
 different gap, get 1.38×, and conclude the rate was cherry-picked.
 
-**Status: half done.** The *mechanism* exists — `scripts/rates.sh` holds a
-per-size saturation table and `sweep.sh` now takes `RATE_FRACTION` (default
-25, i.e. a quarter of each size's measured saturation rate, 4× headroom above
-the knee). **The datasets have not been regenerated with it.**
+**Update, same-day follow-up session:** attempted the regen and found the
+reversal wasn't about offered rate at all — first thermal (Open problem
+#4), then, once thermal was controlled for, a THIRD cause: disabling deep
+C-states costs zcring ~65% at 1 MiB, independent of both rate and
+temperature (Open problem #5). That is now the accepted, disclosed
+explanation for why zcring loses at 256 KiB–1 MiB in the current dataset —
+see README.md's "Why large payloads lose here" section.
 
-- `results/sweep.csv` is still the old flat-gap baseline (timestamp 02:46,
-  predates the rate work). **Do not quote from it.**
-- `results/fanout.csv` was run at a flat `GAP=100`, so it carries the same
-  problem.
+**Status: RESOLVED.** `results/sweep.csv` and `results/fanout.csv`
+regenerated at `RATE_FRACTION=25`, REPS=5, C-states disabled, thermal gate
+active (`wait_for_cool()` per invocation — see Open problem #4). Sensitivity
+check at `RATE_FRACTION=10` and `50` (reduced scope: REPS=3, sizes 64 B/4
+KiB/1 MiB) in `results/{sweep,fanout}_rate{10,50}.csv`. README.md's results
+tables, offered-rate methodology section, and fan-out results section are
+updated from this dataset; superseded numbers (the old 1.47×/1.38×/2.32×
+figures and the "~2× floor" / "1.1× floor" corrections) are removed rather
+than left alongside the new ones.
 
-**Remaining work:** rerun both sweeps at `RATE_FRACTION=25`, REPS=5, C-states
-disabled; add a sensitivity check at two other fractions showing conclusions
-hold; then delete superseded tables from README.md rather than leaving
-several versions in the repo. Until that is done, no large-payload ratio is
-safe to publish.
+The *first* `RATE_FRACTION=25` regen attempt (before the thermal gate
+existed) is not in git history in any meaningful way — it was overwritten
+by the gated regen before commit. reports.txt §19 has its numbers for the
+record.
 
 ## Open problem #2 — deep C-states — RESOLVED 1 Aug 2026
 
@@ -93,6 +102,97 @@ afternoon if the abstract will claim scaling beyond N=2.
 
 Note: WSL2 on that machine remains disqualified for measurement. Live USB is
 a different thing and is valid.
+
+## Open problem #4 — thermal throttling under sustained large-payload load — RESOLVED, same-day follow-up session
+
+Found while chasing Open problem #1: regenerating the offered-rate dataset
+produced a result that looked broken — zcring *losing* to unix at 1 MiB
+(210 µs vs 162 µs), flatly contradicting the established 1.1–1.5× win. A
+controlled gap/`--yield` test ruled out offered rate as the cause (all four
+combinations landed within ~3% of each other).
+
+Root cause: this chip has 2 physical cores; cpu1/cpu3 and cpu0/cpu2 are the
+two SMT pairs. P-state is shared per physical core, not per logical CPU, so
+disabling C-states on the pinned benchmark CPUs (2, 3 — required by Open
+problem #2's fix) keeps **both** physical cores continuously active for the
+whole session, with no idle state available on either sibling. This
+low-TDP embedded part heat-soaks into thermal throttling (confirmed:
+`x86_pkg_temp`/`TCPU` at 97–100 °C, nonzero throttle counters) within tens
+of minutes of continuous benchmarking.
+
+Confirmed directly: package cool (54 °C) vs throttling (97–100 °C),
+identical config (1 MiB, N=1, gap=100 µs) — zcring p50 122.9 µs vs
+210–217 µs. Matches the historical 123 µs claim exactly when cool. Degrades
+*progressively* across a sweep because sizes run ascending (small → large),
+so heat accumulates right into the sizes the large-payload story depends on
+— and zcring degrades far more than pipe/unix (~70% vs ~0–20%) because its
+consumer busy-spins the gap (generating its own heat) where pipe/unix block.
+
+**This likely explains part of Open problem #1's original three-way
+inconsistency too** — thermal state was uncontrolled in all three of those
+runs, not just offered rate.
+
+**Fix, landed, revised twice:** `scripts/lib.sh`'s `wait_for_cool()` gates on
+the package thermal zone (`x86_pkg_temp`, falls back to `TCPU`) before
+**every individual bench invocation** in both `sweep.sh` and `fanout.sh` —
+gating once per payload size wasn't fine-grained enough, since the package
+reheats from a cool start back to throttling within a single size's 15-run
+block. Second revision: found the package **plateaus at 74–81 °C with
+C-states disabled and does not converge further** (confirmed: oscillated in
+that band over 60s of idle wait, no bench running) — because there's no idle
+state left for the pinned cores to actually cool into. So the gate now
+temporarily re-enables C-states system-wide during the wait (letting the
+package actually reach the low-60s/50s), then re-disables before returning
+control to the caller. Costs ~2 min per real cooldown, but it's the only way
+the gate converges at all. Documented as `RUNNING.md` §4b. Full
+investigation in `reports.txt` §19.
+
+**Not just a benchmarking nuisance — a real finding.** A sustained-throughput
+embedded deployment on similarly TDP-constrained hardware would hit the same
+wall. Worth a line in the abstract/slides: it's independent supporting
+evidence for "small messages, not bulk transfer" as the design's sweet spot,
+and for why Layer 2 notification (not just fan-out) matters — a blocking
+consumer doesn't self-heat the package the way a spinning one does.
+
+## Open problem #5 — deep C-states cost zcring ~65% at large payloads, independent of heat — RESOLVED (disclosed, not fixed), same-day follow-up session
+
+Found while re-verifying Open problem #4's fix: even with the thermal gate
+working correctly (package cool before every invocation), the regenerated
+`sweep.csv` still showed zcring losing to unix at 256 KiB–1 MiB. This is a
+*third*, independent cause, not a residue of the first two.
+
+Controlled A/B, 1 MiB, N=1, gap=100 µs, package cool in both cases, no
+poller/other interference, 3 reps each:
+
+| condition | zcring p50 |
+|---|---|
+| C-states enabled | 122.9, 128.4, 133.0 µs |
+| C-states disabled | 217.2, 198.8, 202.1 µs |
+
+Clean, tight, ~65% apart, with temperature and offered rate controlled for
+in both. pipe/unix are not similarly affected (unix was if anything
+slightly *faster* disabled: 152–162 µs either way) — this is specific to
+zcring's busy-spin consumer, not a general "disabling idle states costs
+everyone" effect. Root mechanism not fully pinned down (candidates: lost
+access to a power-efficient wait instruction path on the spinning core, or
+turbo/RAPL power-budget effects from the pinned core never truly idling) —
+investigated with `turbostat` briefly but decided not worth blocking the
+dataset regen on nailing down further. The effect itself is reproducible
+and well-isolated from rate and heat; that's enough to report honestly.
+
+**Decision (user, same-day):** don't split methodology by payload size
+(C-states enabled for large, disabled for small) — keep C-states disabled
+uniformly, since that's the honest, determinism-first configuration this
+problem statement actually asks for, and report the large-payload loss as a
+disclosed trade-off rather than engineering around it to preserve the old
+number. README.md's "Why large payloads lose here" section is the writeup.
+
+**Silver lining, not a consolation prize:** the fan-out data shows the
+trade-off is N=1-only. At 1 MiB, zcring loses at N=1 (0.82×) but wins at
+N=2 (1.38×) and N=4 (2.03×), because the zero-copy fan-out advantage scales
+with consumer count and this C-state cost doesn't. That's arguably a
+*stronger* scalability story than the flat 1.47× the old dataset claimed —
+it shows a genuine crossover, not just a multiplier.
 
 ## Traps already hit once — do not repeat
 

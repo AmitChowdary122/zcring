@@ -86,6 +86,7 @@ for n in $NCONS; do
 
     gap=${GAP:-$(gap_for_fraction "$size" "$RATE_FRACTION")}
 
+    wait_for_cool
     for rep in $(seq 1 "$REPS"); do
       for t in zcring pipe unix; do
         printf 'N=%s %-7s size=%-8s n=%-7s gap=%-6s rep=%s\n' "$n" "$t" "$size" "$c" "$gap" "$rep" >&2

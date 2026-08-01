@@ -178,6 +178,55 @@ sudo cpupower idle-set -E     # restore all idle states
 startup and print a warning (not a hard failure — the scripts still run) if
 any state above C1 is enabled.
 
+### 4b. Deep C-states disabled has a thermal cost on this hardware
+
+Confirmed 2026-08-01. This chip has only **2 physical cores** — cpu1/cpu3
+are one SMT pair, cpu0/cpu2 the other. P-state is shared per physical core,
+not per logical CPU, so disabling C-states on the two pinned benchmark CPUs
+(`--cpu-prod=2 --cpu-cons=3`, as §4a requires) keeps **both** physical cores
+continuously active for as long as the session runs — even between
+individual `bench` invocations, since no idle state is available at all on
+either sibling of a pinned core. On a low-TDP embedded-class part that
+heat-soaks the package into thermal throttling within tens of minutes of a
+sweep.
+
+Effect measured directly at 1 MiB / N=1, identical config, package cool vs
+throttling:
+
+| package state | zcring p50 |
+|---|---|
+| cool (54 °C) | 122.9 µs |
+| throttling (97–100 °C) | 210–217 µs |
+
+The degradation is progressive across a sweep and hits large payloads
+hardest, for two compounding reasons: large payloads take longer to run (more
+heat generated per size), and `sweep.sh`/`fanout.sh` iterate sizes ascending
+(small → large), so heat accumulates monotonically right into the sizes that
+matter most for the large-payload story. zcring degrades more than pipe/unix
+under heat because its consumer busy-spins the whole gap (generating its own
+heat) where pipe/unix block in `read()` — another concrete cost of the
+missing adaptive-notification work (§ next tasks in `STATUS.md`), not just
+the fairness issue already documented.
+
+**Fix:** `scripts/lib.sh`'s `wait_for_cool()` checks the package thermal
+zone (`x86_pkg_temp`, falling back to `TCPU`) before starting each payload
+size and blocks until it drops under `THERMAL_LIMIT_C` (default 60 °C,
+override via env var), printing progress while it waits. Both `sweep.sh` and
+`fanout.sh` call it once per size. If no matching thermal zone exists it
+warns and continues ungated, same philosophy as `check_cstates`. Check
+current temp directly:
+
+```bash
+cat /sys/class/thermal/thermal_zone*/type    # find the x86_pkg_temp / TCPU zone
+cat /sys/class/thermal/thermal_zone*/temp    # millidegrees C
+```
+
+This is a real property of the hardware, not just a benchmarking nuisance —
+say so if asked. An embedded deployment doing sustained large-payload
+zero-copy IPC on a similarly TDP-constrained part would hit the same wall;
+it's one more argument for keeping messages small and using fan-out rather
+than large bulk transfers where possible.
+
 ## 5. Sanity checks — what should worry you
 
 | Observation | What it means |
@@ -192,6 +241,7 @@ any state above C1 is enabled.
 | zcring p50 in tens of µs at N=4 | spinner oversubscription; you need `--yield` |
 | fan-out consumer count doesn't change zcring latency much | expected — publication is O(1) in N. That is the result, not a bug |
 | p99.9 wildly different between otherwise-identical reps (some fine, one in the hundreds of µs / ms) | deep C-state entry — see §4a, run `sudo cpupower idle-set -D 0` |
+| large-payload zcring p50 degrades progressively over the course of a sweep, worse than pipe/unix's degradation | package thermal throttling — see §4b, check `thermal_zone*/temp`, let `wait_for_cool()` do its job |
 
 ## 6. What to report back
 
