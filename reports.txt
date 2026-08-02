@@ -1046,3 +1046,7 @@ Final state: two commits this session, both pushed --
 
 `make demo` (60s default) and `DURATION=600 [TRANSPORT=unix] make demo`
 are both real, both tested at the durations they claim to support.
+
+This item-25 writeup itself committed and pushed as:
+
+    5c16ebd  reports.txt: record the camera fan-out demo session
