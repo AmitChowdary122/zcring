@@ -897,3 +897,152 @@ committed sweep, in case someone picks this back up before the deadline.
 
 `make test` re-run after the bench.c change -- unaffected (bench.c isn't
 part of the test binary), passes clean regardless.
+
+
+25. New session: camera fan-out demo (make demo)
+--------------------------------------------------------------------------
+
+Requested: a live demo pipeline -- camera producer, three consumers doing
+real work (edge-count, jitter-tracker, checksum), zcring fan-out against
+an equivalent 3-socket implementation, live terminal dashboard, must
+survive ten minutes unattended.
+
+Design decisions made before writing code:
+
+- All three consumers touch every pixel, not just the ones whose logical
+  job would require it. A jitter-tracker realistically only needs the
+  8-byte timestamp header; deliberately not doing that, because a consumer
+  that conveniently ignores most of the frame would make zcring's win look
+  bigger than the transport actually earns, and this project's whole
+  --touch discipline exists to prevent exactly that shortcut. jitter got a
+  full-frame min/max scan bolted on for this reason.
+- Frame drops use a real per-tick sequence counter (frame_seq, incremented
+  every 30fps tick whether or not that tick got published), so gap
+  detection works identically on both transports without needing
+  transport-specific bookkeeping.
+- Drop policy: a camera cannot be paused, so the producer never blocks
+  indefinitely. zc_bcast_reserve() gets ~1.5 frame periods of bounded
+  retry before the tick is skipped; the socket path uses poll() with the
+  same bound on all three sockets before committing to write(), skipping
+  the tick for all three if any isn't ready -- keeping "which frames every
+  consumer saw" identical between transports rather than letting sockets
+  drop independently per-consumer.
+- "Memory traffic avoided" reuses the exact accounting already defended in
+  README's benchmark methodology section (1 producer write + N consumer
+  reads for zcring; 1 staging write + N*(kernel-in + kernel-out + consumer
+  read) for sockets -- 2*N passes avoided per frame), not a new formula
+  invented for this demo.
+
+CPU pinning: producer + 3 consumers is 4 roles, and this machine has
+exactly 4 logical CPUs on 2 physical cores. Every role gets a distinct
+logical CPU, but one consumer (checksum, cpu0) necessarily shares a
+physical core with the producer (cpu2) -- same hardware ceiling as N=4
+fan-out (STATUS.md Open problem #3), just arrived at by a different route.
+
+Two real bugs found by testing failure modes directly, not by inspection:
+
+1. Piped the demo through `head -40` to look at early output. The pipe
+   closing early killed the producer via SIGPIPE (default disposition:
+   terminate), and the three forked consumers -- now orphaned -- kept
+   spinning at ~98% CPU indefinitely, confirmed via `ps`. Root cause:
+   g_stop is a per-process flag; a producer that exits via signal never
+   gets to tell its children. Two-part fix: SIGPIPE now ignored in the
+   producer (a closed stdout shouldn't kill a 10-minute run over a
+   redirect), and every producer exit path (natural duration, Ctrl-C,
+   anything else) now explicitly SIGTERMs all three consumers rather than
+   relying on them noticing on their own.
+
+2. That fix isn't enough for SIGKILL, which no handler can catch. Tested
+   this directly: backgrounded the producer, waited 3s, `kill -9`'d it,
+   watched the children. First fix attempt used `getppid() == 1` as an
+   orphan watchdog (checked once per sched_yield() in the consumer's spin
+   loop) -- standard Unix idiom, and it did NOT work. `ps -o ppid` on the
+   orphaned children showed PPID 3506, not 1: this environment (this
+   sandbox) reparents orphans to a subreaper, not init, so `== 1` never
+   fires here. Fixed by capturing the parent's PID immediately after
+   fork() and checking `getppid() != orig_parent` instead -- correct
+   regardless of what catches the orphan, since the actual signal is "my
+   parent changed to something", not "my parent became a specific value".
+   Re-tested the same SIGKILL scenario: all three consumers exited within
+   the test window this time.
+
+Validation: full 10-minute runs (DURATION=600), both transports, with a
+Monitor sampling RSS and frame count every 45s throughout each run (first
+attempt at this used the wrong PID -- ps --ppid against the bash wrapper's
+PID instead of the actual pipeline producer's, giving a nonsensical
+single-child "children_rss" reading; caught and corrected before drawing
+any conclusions from it, not after).
+
+    metric                  zcring              unix (comparator)
+    ----------------------------------------------------------------
+    frames                  18000/18000         18000/18000
+    avg fps                 exactly 30.000      exactly 30.000
+    drift                   zero                zero
+    drops, whole run        0                   0
+    producer RSS            155808 KB, flat     2188 KB, flat
+    consumers RSS (3 total) 461780 KB, flat      2996 KB, flat
+    RSS samples taken       12 (45s apart)       13 (45s apart)
+    p50/p99 latency         edge 708/738us       edge 598/643us
+                            jitter 119/130us     jitter 377/443us
+                            checksum 599/631us   checksum 782/1103us
+    traffic avoided         30.90 GB             n/a (baseline)
+
+RSS was flat from the second sample onward for zcring (~60s in, matching
+the ~17s-per-lap ring-wrap prediction with margin) and flat from the first
+sample for unix (no 150 MiB shared ring to page in, so nothing to
+plateau). Not a leak in either case -- zcring's ~150 MiB per process is
+the fully-paged-in shared ring (memfd-backed, same physical pages counted
+in every process's RSS, confirmed via /proc/<pid>/smaps_rollup showing
+~150 MB of Shared_Dirty against only ~39 MB of Pss for one sample process,
+i.e. the mapping really is shared four ways, not duplicated).
+
+Interesting, unplanned finding: jitter's latency gap between transports
+(119us zcring vs 377us unix, +258us) is proportionally much larger than
+checksum's (599 vs 782us, +183us) even though jitter does LESS processing
+per frame than checksum (min/max scan vs FNV-1a over 307200 bytes). Reads
+as the kernel-copy/syscall cost behaving like a roughly fixed overhead
+that a light consumer can't dilute the way a heavy one does -- consistent
+with, though not proof of, the general "small message overhead dominates"
+story this project is built around, just observed at the per-consumer
+level in a real pipeline instead of at the per-message level in a
+synthetic sweep.
+
+Found a real (if minor) bug on final code review before committing, not
+caught by testing because it only manifests with actual drops (which
+never occurred in any test run): the end-of-run summary line printed
+"%d frames published" using the tick counter `seq` (attempted, including
+drops) rather than the actual `frames_published` counter. Cosmetic today,
+would have misreported under real drops. Fixed and verified the build
+still compiles clean and the demo still exits cleanly with the corrected
+label.
+
+`make test` re-run: unaffected, passes clean (demo/pipeline.c is a
+separate binary, doesn't touch src/zcring.c or the test suite).
+
+README.md gained a "Demo -- camera pipeline" section (what it shows, how
+to run it, the two bugs disclosed rather than hidden). STATUS.md gained a
+"Demo pipeline results" section with the full table above, and -- caught
+while there -- the "story the abstract should tell" section still had the
+OLD pre-regen numbers (18.8x/7.8x, stale fan-out figures) left over from
+before this session's earlier dataset-regen work; corrected it and the
+"Next steps" list (items 1 and demo both marked done) in the same pass,
+since leaving them stale would have handed the next abstract-drafting
+session wrong numbers to work from.
+
+Push required a merge this time: origin/main had moved on independently
+(a separate session had added ABSTRACT.md, based on this session's earlier
+commits -- no overlap with anything touched here). `git diff` confirmed
+zero conflicting files before merging; `git pull --no-rebase --no-edit
+origin main` merged clean, verified with a full clean rebuild (`make
+clean && make && make build/pipeline && make test` plus a demo smoke test)
+before pushing.
+
+Final state: two commits this session, both pushed --
+
+    7f93921  Add camera fan-out demo (make demo): live zcring vs
+             unix-socket comparison
+    6403e07  Merge branch 'main' of .../zcring (brings in the other
+             session's ABSTRACT.md)
+
+`make demo` (60s default) and `DURATION=600 [TRANSPORT=unix] make demo`
+are both real, both tested at the durations they claim to support.
