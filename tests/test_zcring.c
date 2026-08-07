@@ -427,6 +427,299 @@ static void test_bcast_cross_process(void)
     zc_close(&r);
 }
 
+/* ---- Layer 2: adaptive spin-then-futex notification ----
+ *
+ * Two things have to be true and neither is visible in a latency number.
+ * First, delivery must still be exact when consumers sleep — a lost wakeup
+ * looks exactly like a hang, and a hang in CI looks exactly like a slow
+ * machine. Second, consumers must actually *sleep*: a policy that quietly
+ * degenerates to spinning would pass every delivery check while delivering
+ * none of the point. The gap here (200us against a wake cost of a few us) is
+ * chosen so the learned budget must collapse well below it and blocking must
+ * dominate, so n_blocks is a real assertion and not a coincidence.
+ */
+
+#define NT_MSGS    600
+#define NT_GAP_NS  200000ULL   /* 200us: far above any plausible wake cost */
+
+static void test_notify_unicast(void)
+{
+    printf("adaptive notification: unicast delivery with a sleeping consumer\n");
+    zc_ring_t r;
+    CHECK(zc_create_notify(&r, 64, SLOT_SIZE) == 0, "zc_create_notify failed");
+
+    /* [0] mismatches, [1] messages seen, [2] waits, [3] blocks */
+    _Atomic uint64_t *st = mmap(NULL, sizeof(*st) * 4, PROT_READ | PROT_WRITE,
+                                MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    for (int i = 0; i < 4; i++) atomic_store(&st[i], 0);
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        zc_waiter_t w;
+        zc_waiter_init(&w, ZC_BUDGET_SHIFT);
+        for (uint64_t want = 0; want < NT_MSGS; want++) {
+            uint64_t pos, got; uint32_t len;
+            /* Unbounded wait: if notification is broken this hangs, which is
+             * the honest failure mode. A timeout here would convert a lost
+             * wakeup into a passing test with a slow run. */
+            void *p = zc_wait(&r, &w, &pos, &len, 0);
+            if (!p || verify(p, &got) != 0 || got != want)
+                atomic_fetch_add(&st[0], 1);
+            else
+                atomic_fetch_add(&st[1], 1);
+            zc_release(&r, pos);
+        }
+        atomic_store(&st[2], w.n_waits);
+        atomic_store(&st[3], w.n_blocks);
+        _exit(0);
+    }
+
+    uint64_t next = zc_now_ns();
+    for (uint64_t i = 0; i < NT_MSGS; i++) {
+        next += NT_GAP_NS;
+        while (zc_now_ns() < next) { /* pace, so the consumer really idles */ }
+        uint64_t pos; void *p;
+        while (!(p = zc_reserve(&r, &pos))) sched_yield();
+        fill(p, i);
+        zc_commit(&r, pos, SLOT_SIZE);   /* wakes only if someone is asleep */
+    }
+    int stt = 0;
+    waitpid(pid, &stt, 0);
+
+    CHECK(atomic_load(&st[0]) == 0, "%llu wrong/missing messages under notification",
+          (unsigned long long)atomic_load(&st[0]));
+    CHECK(atomic_load(&st[1]) == NT_MSGS, "consumer saw %llu of %d messages",
+          (unsigned long long)atomic_load(&st[1]), NT_MSGS);
+    /* The policy must have learned to sleep. At a 200us gap the CPU budget
+     * drives the spin threshold to a few percent of that, so the overwhelming
+     * majority of waits must end in a block. */
+    CHECK(atomic_load(&st[3]) > (uint64_t)(NT_MSGS / 2),
+          "consumer blocked only %llu times in %llu waits — the budget did not "
+          "converge and it is effectively still spinning",
+          (unsigned long long)atomic_load(&st[3]),
+          (unsigned long long)atomic_load(&st[2]));
+
+    munmap(st, sizeof(*st) * 4);
+    zc_close(&r);
+}
+
+/* Same guarantees for fan-out: one wake must serve every sleeper, and the
+ * per-consumer exactly-once invariant must survive blocking. */
+static void test_notify_bcast(void)
+{
+    printf("adaptive notification: broadcast wakes all %d sleeping consumers\n",
+           BC_CONS);
+    zc_ring_t r;
+    CHECK(zc_create_bcast_notify(&r, 64, SLOT_SIZE) == 0,
+          "zc_create_bcast_notify failed");
+
+    _Atomic uint32_t *sh = mmap(NULL, sizeof(*sh) * 3, PROT_READ | PROT_WRITE,
+                                MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    _Atomic uint32_t *bad = sh, *ready = sh + 1, *blocked = sh + 2;
+    atomic_store(bad, 0); atomic_store(ready, 0); atomic_store(blocked, 0);
+
+    pid_t kids[BC_CONS];
+    for (int k = 0; k < BC_CONS; k++) {
+        kids[k] = fork();
+        if (kids[k] == 0) {
+            int id = zc_bcast_join(&r);
+            if (id < 0) { atomic_fetch_add(bad, 1); _exit(1); }
+            zc_waiter_t w;
+            zc_waiter_init(&w, ZC_BUDGET_SHIFT);
+            atomic_fetch_add(ready, 1);
+            for (uint64_t want = 0; want < NT_MSGS; want++) {
+                uint64_t pos, got; uint32_t len;
+                void *p = zc_bcast_wait(&r, &w, id, &pos, &len, 0);
+                if (!p || verify(p, &got) != 0 || got != want)
+                    atomic_fetch_add(bad, 1);
+                zc_bcast_release(&r, id, pos);
+            }
+            if (w.n_blocks > NT_MSGS / 2) atomic_fetch_add(blocked, 1);
+            zc_bcast_leave(&r, id);
+            _exit(0);
+        }
+    }
+    while (atomic_load(ready) < BC_CONS) sched_yield();
+
+    uint64_t next = zc_now_ns();
+    for (uint64_t i = 0; i < NT_MSGS; i++) {
+        next += NT_GAP_NS;
+        while (zc_now_ns() < next) { }
+        uint64_t pos; void *p;
+        while (!(p = zc_bcast_reserve(&r, &pos))) sched_yield();
+        fill(p, i);
+        zc_bcast_commit(&r, pos, SLOT_SIZE);
+    }
+    for (int k = 0; k < BC_CONS; k++) { int stt = 0; waitpid(kids[k], &stt, 0); }
+
+    CHECK(atomic_load(bad) == 0, "%u wrong/missing messages under notification",
+          atomic_load(bad));
+    /* Every consumer, not just one: a single FUTEX_WAKE with an unbounded
+     * count is what makes notification O(1) in N, and a bug that woke only
+     * the first sleeper would still deliver correctly, just slowly. */
+    CHECK(atomic_load(blocked) == BC_CONS,
+          "only %u of %d consumers actually slept", atomic_load(blocked), BC_CONS);
+
+    munmap(sh, sizeof(*sh) * 3);
+    zc_close(&r);
+}
+
+/* The ski-rental floor (§7) has to hold at the other end of the rate range:
+ * when messages arrive faster than a wake costs, the policy must stay in the
+ * spin regime and keep the path syscall-free. This is the property a fixed
+ * constant cannot have, so it is worth asserting rather than assuming. */
+static void test_notify_fast_arrivals_do_not_block(void)
+{
+    printf("adaptive notification: fast arrivals stay in the spin regime\n");
+    zc_ring_t r;
+    CHECK(zc_create_notify(&r, 1024, SLOT_SIZE) == 0, "zc_create_notify failed");
+
+    _Atomic uint64_t *st = mmap(NULL, sizeof(*st) * 2, PROT_READ | PROT_WRITE,
+                                MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    atomic_store(&st[0], 0); atomic_store(&st[1], 0);
+
+    const uint64_t n = 20000;
+    pid_t pid = fork();
+    if (pid == 0) {
+        zc_waiter_t w;
+        zc_waiter_init(&w, ZC_BUDGET_SHIFT);
+        for (uint64_t want = 0; want < n; want++) {
+            uint64_t pos, got; uint32_t len;
+            void *p = zc_wait(&r, &w, &pos, &len, 0);
+            if (!p || verify(p, &got) != 0 || got != want)
+                atomic_fetch_add(&st[0], 1);
+            zc_release(&r, pos);
+        }
+        atomic_store(&st[1], w.n_blocks);
+        _exit(0);
+    }
+    for (uint64_t i = 0; i < n; i++) {
+        uint64_t pos; void *p;
+        while (!(p = zc_reserve(&r, &pos))) sched_yield();
+        fill(p, i);
+        zc_commit(&r, pos, SLOT_SIZE);
+    }
+    int stt = 0;
+    waitpid(pid, &stt, 0);
+
+    CHECK(atomic_load(&st[0]) == 0, "%llu wrong messages",
+          (unsigned long long)atomic_load(&st[0]));
+    /* Generous bound on purpose: the point is that blocking is rare, not that
+     * it never happens. A descheduled consumer legitimately falls behind and
+     * blocks a few times, and asserting zero would make this test a flake. */
+    CHECK(atomic_load(&st[1]) < n / 20,
+          "blocked %llu times in %llu messages — the ski-rental floor is not "
+          "holding and fast arrivals are paying syscalls",
+          (unsigned long long)atomic_load(&st[1]), (unsigned long long)n);
+
+    munmap(st, sizeof(*st) * 2);
+    zc_close(&r);
+}
+
+/* A bounded wait must return NULL on expiry rather than sleeping forever —
+ * this is what lets a caller poll a shutdown flag between waits. */
+static void test_notify_deadline(void)
+{
+    printf("adaptive notification: bounded wait expires instead of hanging\n");
+    zc_ring_t r;
+    CHECK(zc_create_notify(&r, 8, SLOT_SIZE) == 0, "zc_create_notify failed");
+
+    zc_waiter_t w;
+    zc_waiter_init(&w, ZC_BUDGET_SHIFT);
+    uint64_t pos; uint32_t len;
+    uint64_t t0 = zc_now_ns();
+    void *p = zc_wait(&r, &w, &pos, &len, t0 + 20000000ULL);  /* 20 ms */
+    uint64_t dt = zc_now_ns() - t0;
+    CHECK(p == NULL, "bounded wait returned a message from an empty ring");
+    CHECK(dt >= 20000000ULL, "returned after %lluns, before the deadline",
+          (unsigned long long)dt);
+    CHECK(dt < 2000000000ULL, "returned after %lluns, far past the deadline",
+          (unsigned long long)dt);
+
+    /* And it must leave no waiter registered behind, or the producer would
+     * issue a wake syscall per message forever after. */
+    CHECK(atomic_load(&r.ctrl->waiters) == 0,
+          "waiter count leaked after a timed-out wait");
+    zc_close(&r);
+}
+
+/* The lost-wakeup window, hammered directly.
+ *
+ * §9's argument is about a race whose window is a few instructions wide: the
+ * producer reading ctrl->waiters at the same moment a consumer arms itself and
+ * re-checks the ring. Nothing in the delivery tests above targets it — they
+ * either arrive so slowly that the consumer is long asleep before the producer
+ * publishes, or so fast that it never sleeps at all.
+ *
+ * This test aims squarely at the boundary by publishing at a gap comparable to
+ * the learned spin budget, so the consumer is repeatedly deciding to sleep at
+ * the instant the producer is deciding whether to wake it. A lost wakeup would
+ * hang, so the wait is bounded and expiries are counted: the failure surfaces
+ * as a number rather than as a test run that never returns.
+ *
+ * This exists because it is the empirical half of the argument. The formal
+ * half is §9's modification-order reasoning, which `make tsan` can only check
+ * because that reasoning was written with same-location RMWs rather than
+ * fences — GCC's TSan does not instrument atomic_thread_fence at all. */
+
+#define LW_MSGS 4000
+
+static void test_notify_lost_wakeup_window(void)
+{
+    printf("adaptive notification: no lost wakeups at the arm/publish boundary\n");
+    zc_ring_t r;
+    CHECK(zc_create_notify(&r, 256, SLOT_SIZE) == 0, "zc_create_notify failed");
+
+    /* [0] wrong, [1] timeouts, [2] blocks */
+    _Atomic uint64_t *st = mmap(NULL, sizeof(*st) * 3, PROT_READ | PROT_WRITE,
+                                MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    for (int i = 0; i < 3; i++) atomic_store(&st[i], 0);
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        zc_waiter_t w;
+        zc_waiter_init(&w, ZC_BUDGET_SHIFT);
+        for (uint64_t want = 0; want < LW_MSGS; want++) {
+            uint64_t pos, got; uint32_t len;
+            /* Generous relative to any real wake, tight enough that a genuine
+             * lost wakeup cannot hide inside it. */
+            void *p = zc_wait(&r, &w, &pos, &len, zc_now_ns() + 500000000ULL);
+            if (!p) { atomic_fetch_add(&st[1], 1); break; }
+            if (verify(p, &got) != 0 || got != want) atomic_fetch_add(&st[0], 1);
+            zc_release(&r, pos);
+        }
+        atomic_store(&st[2], w.n_blocks);
+        _exit(0);
+    }
+
+    /* Sweep the publish gap across the range the spin budget converges into,
+     * so the arm/publish collision is hit from both sides rather than at one
+     * fixed offset the policy could settle away from. */
+    uint64_t next = zc_now_ns();
+    for (uint64_t i = 0; i < LW_MSGS; i++) {
+        next += 2000ULL + (i % 32) * 400ULL;    /* 2us .. 14.4us */
+        while (zc_now_ns() < next) { }
+        uint64_t pos; void *p;
+        while (!(p = zc_reserve(&r, &pos))) sched_yield();
+        fill(p, i);
+        zc_commit(&r, pos, SLOT_SIZE);
+    }
+    int stt = 0;
+    waitpid(pid, &stt, 0);
+
+    CHECK(atomic_load(&st[1]) == 0,
+          "%llu wait(s) expired — a wakeup was lost at the arm/publish boundary",
+          (unsigned long long)atomic_load(&st[1]));
+    CHECK(atomic_load(&st[0]) == 0, "%llu wrong messages",
+          (unsigned long long)atomic_load(&st[0]));
+    /* If the policy never slept, this test proved nothing about wakeups. */
+    CHECK(atomic_load(&st[2]) > 0,
+          "consumer never blocked, so the race window was never entered");
+
+    munmap(st, sizeof(*st) * 3);
+    zc_close(&r);
+}
+
 int main(void)
 {
     /* Line-buffer stdout. When it is a pipe the default is block buffering,
@@ -444,6 +737,11 @@ int main(void)
     test_bcast_reap();
     test_bcast_reap_spares_slow();
     test_bcast_cross_process();
+    test_notify_unicast();
+    test_notify_bcast();
+    test_notify_fast_arrivals_do_not_block();
+    test_notify_deadline();
+    test_notify_lost_wakeup_window();
 
     if (failures) { printf("\n%d check(s) FAILED\n", failures); return 1; }
     printf("\nall checks passed\n");

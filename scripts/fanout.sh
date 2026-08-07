@@ -10,15 +10,21 @@
 # Runs in --touch mode for the same reason sweep.sh does: without it zcring
 # moves only the 8-byte header and the result is an artifact. See README.md.
 #
-# Runs in --yield mode, which sweep.sh does not. Rationale: zcring's waiters
-# busy-wait while pipe/unix block in read(). At N=1 that costs little, but
-# this is a dual-core machine, and at N=4 there are more spinners than
-# hardware threads — pure spin then measures scheduler thrash rather than
-# fan-out, inflating zcring p50 by ~40x. --yield gives the waiters a bounded
-# spin and then hands the CPU back, which is both closer to what the
-# comparators already do and closer to what Layer 2 notification will do.
-# The flag is a no-op for pipe/unix. Measured cost of --yield at N=1 is ~8%
-# on zcring, i.e. it is the conservative choice, not a flattering one.
+# Runs in --notify mode, which sweep.sh does not by default. Rationale:
+# zcring's waiters would otherwise busy-wait while pipe/unix block in read().
+# At N=1 that costs little, but this is a dual-core machine, and at N=4 there
+# are more spinners than hardware threads — pure spin then measures scheduler
+# thrash rather than fan-out, inflating zcring p50 by ~40x. The adaptive
+# spin-then-futex waiter blocks when blocking pays, so the consumers stop
+# denying each other the CPU. The flag is a no-op for pipe/unix.
+#
+# This replaces the earlier --yield stopgap (a fixed 2000-iteration spin then
+# sched_yield), which has been removed along with its constant.
+#
+# !! results/fanout.csv and results/fanout_verify.csv predate this change and
+# !! were measured under --yield. They are NOT reproducible from this script
+# !! any more and must not be quoted in the same table as notify-mode numbers.
+# !! Their provenance is commit 08a8aa3 (primary) and 73b8054 (verify).
 #
 # Offered rate is per-size, not a flat --gap-us -- see scripts/rates.sh.
 # RATE_FRACTION (default 25, a quarter of saturating throughput) is a
@@ -91,7 +97,7 @@ for n in $NCONS; do
       for t in zcring pipe unix; do
         printf 'N=%s %-7s size=%-8s n=%-7s gap=%-6s rep=%s\n' "$n" "$t" "$size" "$c" "$gap" "$rep" >&2
         $BENCH --transport="$t" --consumers="$n" --size="$size" --count="$c" \
-               --gap-us="$gap" --touch --yield \
+               --gap-us="$gap" --touch --notify \
                --cpu-prod="$PROD" --cpu-cons="$CONS" --csv >> "$OUT"
       done
     done

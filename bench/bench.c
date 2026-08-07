@@ -10,10 +10,18 @@
  * same number of payload bytes from the same producer to the same consumer.
  * The only thing that differs is how many times those bytes get copied.
  *
- * Known asymmetry, stated rather than hidden: the zcring consumer spins,
- * while pipe/unix consumers block in read(). Layer 2's adaptive
- * spin-then-futex path is what closes that gap honestly; until then, treat
- * zcring's idle-CPU cost as unrepresentative of the finished system.
+ * Waiting policy, and why there are two of them:
+ *
+ *   default    The zcring consumer spins. pipe/unix consumers block in
+ *              read(). This is not like-for-like on idle CPU cost, and it is
+ *              the methodology every dataset committed to results/ was
+ *              measured under, so it stays the default and stays reproducible.
+ *   --notify   The zcring consumer uses the adaptive spin-then-futex waiter
+ *              (zc_wait/zc_bcast_wait), which learns its spin budget online
+ *              and blocks when blocking pays. This is the honest comparison:
+ *              both sides now block when idle. It supersedes the old --yield
+ *              flag, which approximated blocking with a fixed 2000-iteration
+ *              spin and a sched_yield(), and which is gone.
  *
  * ---------------------------------------------------------------------------
  * Fan-out mode: --consumers=N
@@ -112,27 +120,6 @@ static void spin_until(uint64_t deadline)
     while (now_ns() < deadline) { /* busy-wait: sleep granularity is too coarse */ }
 }
 
-/* --yield: bounded spin, then hand the CPU back.
- *
- * The zcring paths busy-wait while pipe/unix consumers block in read(), which
- * is harmless at N=1 on an idle machine and pathological once producer plus
- * consumers outnumber the hardware threads — every spinner then burns a full
- * timeslice denying the CPU to the peer it is waiting for. On a dual-core
- * box that is N>=3.
- *
- * This flag exists to tell those two effects apart. Pure spin is the default
- * so the baseline methodology is unchanged; with --yield the waiter
- * approximates the blocking behaviour the comparators already have, which is
- * also what Layer 2's adaptive spin-then-futex path will do properly. If a
- * tail collapses under --yield it was scheduler contention, not fan-out cost. */
-#define YIELD_SPINS 2000
-
-static inline void wait_backoff(int use_yield, uint32_t *spins)
-{
-    if (!use_yield) return;
-    if (++*spins >= YIELD_SPINS) { *spins = 0; sched_yield(); }
-}
-
 /* --sleep: diagnostic only, consumer-side.
  *
  * Deliberately crude: a plain nanosleep(1us-requested) between polls instead
@@ -140,14 +127,19 @@ static inline void wait_backoff(int use_yield, uint32_t *spins)
  * hypothesis (STATUS.md Open problem #5): that the zcring consumer's
  * continuous busy-spin -- not thermal state, not offered rate -- is what
  * costs ~65% at 1 MiB when deep C-states are disabled, by denying the core a
- * real block/wake cycle the way pipe/unix's read() gets for free. If this
- * recovers something close to the C-states-enabled latency despite its own
- * sleep-wake overhead, that is direct support for the hypothesis; if it
- * doesn't, the hypothesis is wrong and this flag has done its job either way.
+ * real block/wake cycle the way pipe/unix's read() gets for free.
+ *
+ * It did not: --sleep landed WORSE than spin (STATUS.md records the numbers).
+ * The recorded caveat was that nanosleep() is not a real block/wake cycle
+ * either -- the cpuidle framework is equally disabled underneath it -- so the
+ * test could not cleanly falsify the mechanism. --notify is the clean test
+ * that caveat asked for, and this flag is kept only so that three-way
+ * comparison stays runnable. Not for quoted data.
+ *
  * Only wired into the consumer's wait loop -- the producer's inter-message
- * pacing (spin_until) and its own (rarely-hit, ring-full) wait_backoff call
- * are deliberately left alone, since the question is specifically about the
- * consumer's poll behaviour. */
+ * pacing (spin_until) and its own rarely-hit ring-full spin are deliberately
+ * left alone, since the question is specifically about the consumer's poll
+ * behaviour. */
 static inline void wait_backoff_sleep(void)
 {
     struct timespec ts = { .tv_sec = 0, .tv_nsec = 1000 }; /* 1us requested */
@@ -202,7 +194,7 @@ int main(int argc, char **argv)
     int      cpu_prod = -1;
     int      cons_cpu[MAX_CONS];
     int      ncons_cpu = 0;
-    int      csv = 0, touch = 0, use_yield = 0, use_sleep = 0;
+    int      csv = 0, touch = 0, use_notify = 0, use_sleep = 0;
     int      nc = 1, nc_given = 0;
 
     for (int i = 1; i < argc; i++) {
@@ -230,21 +222,25 @@ int main(int argc, char **argv)
         }
         else if (!strcmp(argv[i], "--csv")) csv = 1;
         else if (!strcmp(argv[i], "--touch")) touch = 1;
-        else if (!strcmp(argv[i], "--yield")) use_yield = 1;
+        else if (!strcmp(argv[i], "--notify")) use_notify = 1;
         else if (!strcmp(argv[i], "--sleep")) use_sleep = 1;
         else if (!strcmp(argv[i], "--help")) {
             printf("usage: %s [--transport=zcring|pipe|unix] [--size=N] [--count=N]\n"
                    "          [--warmup=N] [--gap-us=N] [--cpu-prod=N] [--cpu-cons=A,B,..]\n"
-                   "          [--consumers=N] [--touch] [--yield] [--sleep] [--csv]\n"
+                   "          [--consumers=N] [--touch] [--notify] [--sleep] [--csv]\n"
                    "  --cpu-cons   CPU list; consumer k pins to the k'th entry, wrapping.\n"
                    "               Must not include the producer's SMT sibling.\n"
                    "  --touch      produce and consume every payload cache line (fair mode)\n"
-                   "  --yield      bounded spin then sched_yield in zcring waits, instead\n"
-                   "               of pure busy-wait. Separates fan-out cost from spinner\n"
-                   "               oversubscription when N exceeds the core count.\n"
-                   "  --sleep      diagnostic only: zcring consumer nanosleeps between polls\n"
-                   "               instead of spinning/yielding. Crude, not for quoted data;\n"
-                   "               see wait_backoff_sleep() in bench.c. Overrides --yield.\n"
+                   "  --notify     zcring consumers use the adaptive spin-then-futex waiter\n"
+                   "               instead of busy-waiting: the spin budget is learned online\n"
+                   "               from the observed inter-arrival distribution and the\n"
+                   "               consumer blocks when blocking pays. Makes idle CPU cost\n"
+                   "               comparable to pipe/unix, which already block in read().\n"
+                   "               Replaces the removed --yield stopgap. The learned state is\n"
+                   "               reported to stderr at the end of the run.\n"
+                   "  --sleep      diagnostic only: zcring consumer nanosleeps between polls.\n"
+                   "               Crude, superseded by --notify, kept so the historical\n"
+                   "               three-way comparison stays runnable. Not for quoted data.\n"
                    "  --consumers  fan out to N consumers. zcring uses the broadcast ring\n"
                    "               (one publish, zero copies); pipe/unix use N connections\n"
                    "               and the producer writes the payload N times.\n"
@@ -264,6 +260,7 @@ int main(int argc, char **argv)
      * gate's own overhead rather than the unicast path, which is what makes
      * the N=1/2/4 rows a controlled comparison. */
     int bcast = (transport == T_ZCRING) && nc_given;
+    int notify = (transport == T_ZCRING) && use_notify && !use_sleep;
 
     uint32_t total = warmup + count;
 
@@ -282,6 +279,15 @@ int main(int argc, char **argv)
     if (ready == MAP_FAILED) { perror("mmap ready"); return 1; }
     atomic_store(ready, 0);
 
+    /* Each consumer's learned policy state, written back at the end of its
+     * run so the parent can report what the estimator actually converged to.
+     * An adaptive scheme that cannot show its working is indistinguishable
+     * from a claim of one. */
+    zc_waiter_t *wstate = mmap(NULL, sizeof(*wstate) * MAX_CONS,
+                               PROT_READ | PROT_WRITE,
+                               MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (wstate == MAP_FAILED) { perror("mmap wstate"); return 1; }
+
     /* Ring sized to ~64 MiB of arena, clamped to a sane slot count. */
     uint32_t slots = 1024;
     while (slots > 8 && (uint64_t)slots * size > (64ULL << 20)) slots >>= 1;
@@ -291,8 +297,10 @@ int main(int argc, char **argv)
     for (int k = 0; k < MAX_CONS; k++) { fds[k][0] = -1; fds[k][1] = -1; }
 
     if (transport == T_ZCRING) {
-        int rc = bcast ? zc_create_bcast(&ring, slots, size)
-                       : zc_create(&ring, slots, size);
+        int rc = bcast ? (notify ? zc_create_bcast_notify(&ring, slots, size)
+                                 : zc_create_bcast(&ring, slots, size))
+                       : (notify ? zc_create_notify(&ring, slots, size)
+                                 : zc_create(&ring, slots, size));
         if (rc != 0) { perror("zc_create"); return 1; }
     } else {
         for (int k = 0; k < nc; k++) {
@@ -325,15 +333,22 @@ int main(int argc, char **argv)
             int id = 0;
             if (bcast && (id = zc_bcast_join(&ring)) < 0) { perror("zc_bcast_join"); _exit(1); }
             atomic_fetch_add(ready, 1);
-            uint32_t spins = 0;
+            zc_waiter_t w;
+            zc_waiter_init(&w, ZC_BUDGET_SHIFT);
             for (uint32_t i = 0; i < total; i++) {
                 uint64_t pos; uint32_t len; void *p;
-                if (use_sleep) {
+                if (notify) {
+                    /* Unbounded: the producer will publish, and a deadline
+                     * here would silently convert a lost wakeup into a
+                     * plausible-looking latency sample. */
+                    if (bcast) p = zc_bcast_wait(&ring, &w, id, &pos, &len, 0);
+                    else       p = zc_wait(&ring, &w, &pos, &len, 0);
+                } else if (use_sleep) {
                     if (bcast) { while (!(p = zc_bcast_acquire(&ring, id, &pos, &len))) wait_backoff_sleep(); }
                     else       { while (!(p = zc_acquire(&ring, &pos, &len)))          wait_backoff_sleep(); }
                 } else {
-                    if (bcast) { while (!(p = zc_bcast_acquire(&ring, id, &pos, &len))) wait_backoff(use_yield, &spins); }
-                    else       { while (!(p = zc_acquire(&ring, &pos, &len)))          wait_backoff(use_yield, &spins); }
+                    if (bcast) { while (!(p = zc_bcast_acquire(&ring, id, &pos, &len))) { /* spin */ } }
+                    else       { while (!(p = zc_acquire(&ring, &pos, &len)))          { /* spin */ } }
                 }
                 uint64_t sent;
                 memcpy(&sent, p, sizeof(sent));
@@ -342,6 +357,7 @@ int main(int argc, char **argv)
                 if (bcast) zc_bcast_release(&ring, id, pos);
                 else       zc_release(&ring, pos);
             }
+            wstate[k] = w;
             if (bcast) zc_bcast_leave(&ring, id);
         } else {
             for (int j = 0; j < nc; j++) {
@@ -373,13 +389,16 @@ int main(int argc, char **argv)
     uint64_t next = now_ns();
 
     if (transport == T_ZCRING) {
-        uint32_t spins = 0;
         for (uint32_t i = 0; i < total; i++) {
             next += gap;
             spin_until(next);
             uint64_t pos; void *p;
-            if (bcast) { while (!(p = zc_bcast_reserve(&ring, &pos))) wait_backoff(use_yield, &spins); }
-            else       { while (!(p = zc_reserve(&ring, &pos)))       wait_backoff(use_yield, &spins); }
+            /* The producer's own wait is left as a spin deliberately: it is
+             * only reached when the ring is full, which under a paced offered
+             * rate means the sizing is wrong, and notification here would hide
+             * that rather than fix it. See §10 in zcring.h. */
+            if (bcast) { while (!(p = zc_bcast_reserve(&ring, &pos))) { /* backpressure */ } }
+            else       { while (!(p = zc_reserve(&ring, &pos)))       { /* ring full */ } }
             /* Construct in place. The stamp IS the message header — there is
              * no staging buffer and no copy. One publish reaches all N. */
             uint64_t t = now_ns();
@@ -462,8 +481,33 @@ int main(int argc, char **argv)
         printf("  max    %10llu ns\n", (unsigned long long)s[n - 1]);
     }
 
+    /* What the policy learned, to stderr so it never contaminates --csv
+     * stdout. This is the evidence that the threshold is adaptive rather than
+     * merely claimed to be: spin_ns is where the estimator settled, and
+     * blocks/waits is the realised fraction of waits that paid a syscall,
+     * which §5 predicts should sit near 1 - p once the budget is not binding
+     * and near 1 when it is. */
+    if (notify) {
+        for (int k = 0; k < nc; k++) {
+            const zc_waiter_t *w = &wstate[k];
+            fprintf(stderr,
+                    "  learned[c%d] spin=%lluns gap_ewma=%lluns wake_ewma=%lluns "
+                    "burn_ewma=%lluns waits=%llu blocks=%llu (%.1f%%) explores=%llu\n",
+                    k,
+                    (unsigned long long)w->spin_ns,
+                    (unsigned long long)w->gap_ewma,
+                    (unsigned long long)w->wake_ewma,
+                    (unsigned long long)w->burn_ewma,
+                    (unsigned long long)w->n_waits,
+                    (unsigned long long)w->n_blocks,
+                    w->n_waits ? 100.0 * (double)w->n_blocks / (double)w->n_waits : 0.0,
+                    (unsigned long long)w->n_explores);
+        }
+    }
+
     free(s);
     if (transport == T_ZCRING) zc_close(&ring);
+    munmap(wstate, sizeof(*wstate) * MAX_CONS);
     munmap(samples, samp_bytes);
     munmap((void *)ready, sizeof(*ready));
     return 0;

@@ -14,7 +14,18 @@
 # set, overrides the table entirely with a flat value for ad hoc single-rate
 # exploration -- not used for committed data.
 #
-# Env overrides: COUNT, RATE_FRACTION, GAP, SIZES, REPS, OUT_SUFFIX
+# WAITER selects how zcring consumers wait, and it is deliberately defaulted
+# to `spin`: every dataset committed to results/ was measured that way, and
+# changing the default would silently make the committed baseline
+# irreproducible from this tree. `WAITER=notify` uses the adaptive
+# spin-then-futex waiter instead, which is the like-for-like comparison
+# against pipe/unix (both sides then block when idle) at the cost of a wake on
+# most messages. The two are different questions, not better and worse
+# versions of one: spin answers "lowest achievable latency given a dedicated
+# core", notify answers "latency at an idle CPU cost comparable to a socket".
+# Report both, never silently mix them in one table.
+#
+# Env overrides: COUNT, RATE_FRACTION, GAP, SIZES, REPS, WAITER, OUT_SUFFIX
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -29,6 +40,14 @@ COUNT=${COUNT:-20000}
 RATE_FRACTION=${RATE_FRACTION:-25}
 REPS=${REPS:-1}
 SIZES=${SIZES:-"64 256 1024 4096 16384 65536 262144 1048576"}
+WAITER=${WAITER:-spin}
+
+case "$WAITER" in
+    spin)   WAIT_FLAG="" ;;
+    notify) WAIT_FLAG="--notify" ;;
+    *) echo "WAITER must be 'spin' or 'notify', got '$WAITER'" >&2; exit 1 ;;
+esac
+echo "zcring waiter: $WAITER" >&2
 
 # --- pick two cores that are NOT SMT siblings -------------------------------
 # Sibling threads share L1/L2, which flatters shared-memory IPC and makes the
@@ -77,7 +96,7 @@ for size in $SIZES; do
       wait_for_cool
       printf 'running %-7s size=%-8s n=%-7s gap=%-6s rep=%s\n' "$t" "$size" "$n" "$gap" "$rep" >&2
       $BENCH --transport="$t" --size="$size" --count="$n" \
-             --gap-us="$gap" --touch $PIN --csv >> "$OUT"
+             --gap-us="$gap" --touch $WAIT_FLAG $PIN --csv >> "$OUT"
     done
   done
 done

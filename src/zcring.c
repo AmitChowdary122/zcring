@@ -2,6 +2,7 @@
 #include "zcring.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <string.h>
@@ -14,6 +15,62 @@
 #ifndef MFD_CLOEXEC
 #define MFD_CLOEXEC 0x0001U
 #endif
+
+/* Raw futex ops. Spelled out rather than pulled from <linux/futex.h> so this
+ * builds against any libc without dragging kernel headers into the public
+ * header's include set.
+ *
+ * FUTEX_PRIVATE_FLAG is deliberately absent. The control block is a
+ * MAP_SHARED memfd mapped at a different virtual address in every process, so
+ * the kernel has to key the wait queue on the underlying page rather than on
+ * the address. With the private flag this would work perfectly between
+ * threads of one process and silently never wake anything across processes —
+ * which is the only configuration that matters here. See §9 in zcring.h. */
+#define ZC_FUTEX_WAIT 0
+#define ZC_FUTEX_WAKE 1
+
+int zc_futex_wait(_Atomic uint32_t *word, uint32_t expect,
+                  const struct timespec *rel)
+{
+    long rc = syscall(SYS_futex, (uint32_t *)word, ZC_FUTEX_WAIT, expect,
+                      rel, NULL, 0);
+    return rc < 0 ? -1 : 0;
+}
+
+int zc_futex_wake(_Atomic uint32_t *word, int n)
+{
+    long rc = syscall(SYS_futex, (uint32_t *)word, ZC_FUTEX_WAKE, n,
+                      NULL, NULL, 0);
+    return (int)rc;
+}
+
+void zc_wake(zc_ring_t *r)
+{
+    zc_ctrl_t *c = r->ctrl;
+    /* A read-modify-write that adds nothing, not a load — see zcring.h §9.
+     * Adding zero still places this in ctrl->waiters' modification order,
+     * which is what pairs it with the consumer's increment and forbids the
+     * interleaving where the producer misses a waiter and that waiter misses
+     * the message. Do not "optimise" this into an atomic_load: a load carries
+     * no such guarantee, and the resulting lost wakeup is a hang, not a
+     * slowdown. */
+    if (atomic_fetch_add_explicit(&c->waiters, 0, memory_order_seq_cst) == 0)
+        return;
+
+    /* The consumer's only way to measure what being asleep cost it, and to
+     * recover the true arrival time of a censored sample (§7). Free here: this
+     * path is about to make a syscall regardless. */
+    atomic_store_explicit(&c->wake_ts, zc_now_ns(), memory_order_relaxed);
+
+    /* Bumping the generation closes the race against a consumer that has
+     * already sampled futex_word but not yet entered FUTEX_WAIT: its wait
+     * fails with EAGAIN instead of sleeping. */
+    atomic_fetch_add_explicit(&c->futex_word, 1, memory_order_release);
+
+    /* One wake for every sleeper. Notification is O(1) in the consumer count
+     * exactly as publication is. */
+    zc_futex_wake(&c->futex_word, INT_MAX);
+}
 
 static int zc_memfd(const char *name, unsigned flags)
 {
@@ -41,6 +98,9 @@ static int zc_map(zc_ring_t *r, int fd, size_t map_size)
     r->arena     = (uint8_t *)base + c->arena_off;
     r->mask      = c->slot_count - 1;
     r->slot_size = c->slot_size;
+    /* Cached locally so zc_commit()'s per-message test is an L1 hit on a
+     * private word rather than a load from the shared control block. */
+    r->notify    = (c->mode & ZC_MODE_F_NOTIFY) ? 1u : 0u;
     r->fd        = fd;
     return 0;
 }
@@ -84,6 +144,7 @@ static int zc_create_mode(zc_ring_t *r, uint32_t slot_count, uint32_t slot_size,
     atomic_store_explicit(&c->tail, 0, memory_order_relaxed);
     atomic_store_explicit(&c->futex_word, 0, memory_order_relaxed);
     atomic_store_explicit(&c->waiters, 0, memory_order_relaxed);
+    atomic_store_explicit(&c->wake_ts, 0, memory_order_relaxed);
     atomic_store_explicit(&c->gate_cache, 0, memory_order_relaxed);
 
     /* memset already zeroed the registry, which is ZC_CONS_FREE. Written
@@ -118,6 +179,18 @@ int zc_create(zc_ring_t *r, uint32_t slot_count, uint32_t slot_size)
 int zc_create_bcast(zc_ring_t *r, uint32_t slot_count, uint32_t slot_size)
 {
     return zc_create_mode(r, slot_count, slot_size, ZC_MODE_BROADCAST);
+}
+
+int zc_create_notify(zc_ring_t *r, uint32_t slot_count, uint32_t slot_size)
+{
+    return zc_create_mode(r, slot_count, slot_size,
+                          ZC_MODE_UNICAST | ZC_MODE_F_NOTIFY);
+}
+
+int zc_create_bcast_notify(zc_ring_t *r, uint32_t slot_count, uint32_t slot_size)
+{
+    return zc_create_mode(r, slot_count, slot_size,
+                          ZC_MODE_BROADCAST | ZC_MODE_F_NOTIFY);
 }
 
 int zc_attach(zc_ring_t *r, int fd)
@@ -155,7 +228,10 @@ int zc_bcast_join(zc_ring_t *r)
 {
     if (!r || !r->ctrl) { errno = EINVAL; return -1; }
     zc_ctrl_t *c = r->ctrl;
-    if (c->mode != ZC_MODE_BROADCAST) { errno = EINVAL; return -1; }
+    /* Masked, not compared whole: the high bits of mode carry independent
+     * flags (ZC_MODE_F_NOTIFY). A peer built before those flags existed
+     * compares the whole word and refuses, which is the safe direction. */
+    if ((c->mode & ZC_MODE_MASK) != ZC_MODE_BROADCAST) { errno = EINVAL; return -1; }
 
     for (uint32_t i = 0; i < ZC_MAX_CONSUMERS; i++) {
         uint32_t expect = ZC_CONS_FREE;
