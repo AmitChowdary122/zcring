@@ -1249,3 +1249,120 @@ share a table with any notify-mode number. scripts/fanout.sh now runs
 --notify. Regenerating that sweep is the highest-value measurement
 outstanding; it is also the first real test of whether notification removes
 the 64 B / N=4 spinner-oversubscription artifact.
+
+
+28. Session close: adaptive notification session -- verification, commits,
+    final state
+--------------------------------------------------------------------------
+
+One session, two substantive pieces of work, both recorded above: item 26
+(build adaptive notification) and item 27 (re-run the C-state A/B with the
+real block/wake cycle it made possible). This item is the close-out.
+
+Session shape. The user's brief was a single chain: build the thing, keep
+tsan clean, then use it to re-test the one hypothesis that could not be
+tested without it, and report the answer either way. It came out as a
+negative result, which is what item 27 says it is. No attempt was made to
+find a framing in which it looks positive -- the -6.6% row in the gap=2000us
+table is exactly the sort of number that could have been quoted as "the
+penalty shrank under notification", and it is written up as what it actually
+is (the enabled-baseline getting worse, not the disabled cost improving).
+That distinction is the single most important thing in item 27 and it should
+survive any future summarisation of it.
+
+Two course corrections mid-build, both from checking rather than assuming --
+recorded in item 26 in full, flagged here because both are the kind of thing
+a later session might undo by "simplifying":
+
+  - the wake protocol was rewritten from atomic_thread_fence to
+    same-location seq_cst RMWs, because GCC's tsan does not model fences and
+    the fence version left the framework's most delicate ordering
+    unverifiable by the one tool this project relies on for exactly that.
+  - zc_wake() was moved out of line after reading the generated assembly,
+    because inlining it pulled a struct timespec into zc_commit's frame and
+    -fstack-protector-strong then added canary setup to EVERY commit,
+    including on rings with notification disabled. That would have silently
+    invalidated "the non-notify fast path is unchanged", and with it the
+    reproducibility of every committed dataset.
+
+Both were found by looking at output (a compiler warning, a disassembly)
+rather than by reasoning about what the code should do. Worth repeating as a
+habit.
+
+One small portability fix not worth its own item: zcring.h now needs a
+monotonic clock, and under strict -std=c11 without feature-test macros
+CLOCK_MONOTONIC is hidden, producing an implicit-declaration warning cascade
+that never names the real problem. Added an #error that says what to do
+(-std=gnu11, or define _POSIX_C_SOURCE >= 199309L / _GNU_SOURCE first). The
+project's own sources all define _GNU_SOURCE so nothing in-tree was
+affected; this is for whoever integrates the header.
+
+Verification before committing, all from a clean tree:
+
+    make clean && make        warning-free (-Wall -Wextra)
+    make test                 all checks pass; run 8x consecutively to
+                              check the new timing-sensitive notification
+                              tests are not flaky -- 8/8 clean
+    make tsan                 all checks pass, 3x consecutively, and the
+                              -Wtsan warning that prompted the fence rewrite
+                              is gone
+    make build/pipeline       demo still builds against the changed header
+    zc_ctrl_t layout          re-measured and byte-identical to the
+                              pre-change build (1344 bytes; head=64
+                              tail=128 futex_word=192 waiters=196
+                              wake_ts=200 gate_cache=256 cons=320), which
+                              is what the six new _Static_asserts pin
+
+Docs updated, and deliberately more than the minimum, because several
+existing statements became false rather than merely incomplete:
+
+    README.md      new "Layer 2 -- adaptive notification" section; rewrote
+                   "Why large payloads lose here" with both A/B tables; the
+                   fan-out table now carries a provenance warning; Known
+                   gaps rewritten.
+    STATUS.md      new "Adaptive notification" section (what a fresh session
+                   must not undo) and "Open problem #5, follow-up 2"; the
+                   fan-out-data warning is at the TOP of the file, not
+                   buried, because quoting that data next to a notify number
+                   is the most likely way for a future session to get this
+                   wrong.
+    CLAUDE.md      AI/ML criterion now has an answer; next-tasks reordered;
+                   the superseded "pipe/unix are not affected by the C-state
+                   setting" sub-claim marked as such.
+    RUNNING.md     --yield references replaced; the thermal section's
+                   busy-spin aside corrected to note that WAITER=notify
+                   removes the fairness asymmetry but NOT the large-payload
+                   C-state cost.
+    ABSTRACT.md    its "do not mention adaptive notification, it is unbuilt"
+                   instruction is now actively misleading and is corrected
+                   in place. The abstract itself was not rewritten -- that
+                   is a strategic task and STATUS.md lists it as next.
+
+Commits this session (both local at time of writing, pushed immediately
+after this item):
+
+    ef1832e  Layer 2: adaptive spin-then-futex notification with an
+             online-learned budget                          (item 26)
+    b884071  C-state A/B re-run with a real block/wake cycle: busy-spin
+             hypothesis refuted                             (item 27)
+
+Split deliberately rather than committed as one: the A/B is a quotable
+result with its own raw data and should be findable in the log without
+reading a feature commit's diff.
+
+Machine left as RUNNING.md requires: C-states re-enabled, governor left at
+performance from the A/B run. Firefox was killed at the start of the
+measurement (it was on cpu2, the pinned producer core) and was NOT
+restarted -- the user asked for that and said they would reopen it.
+
+State at close. Layer 2 is functionally complete except for the
+eventfd/epoll bridge. The one thing this session created and did not finish
+is the fan-out dataset problem: removing --yield made results/fanout.csv and
+fanout_verify.csv historical, and the fan-out crossover claim -- which is
+the project's whole scalability story -- currently rests on data that cannot
+be regenerated from this tree. It is flagged in three places and is item 4
+in STATUS.md's next steps. It is a script run on a quiet machine, not a
+design task, and it doubles as the first measurement of whether adaptive
+notification removes the 64 B / N=4 spinner-oversubscription artifact
+(1.03us against ~120ns at N=1/2). That should be the next session's work,
+before the abstract is finalised.
