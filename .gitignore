@@ -8,3 +8,6 @@ perf.data*
 # results/ is deliberately NOT ignored — raw benchmark data belongs in the
 # repo. Reproducibility counts as feasibility in the rubric, and judges may
 # ask to see the numbers behind a claim.
+
+# scratch previews from docs/deck.py rendering — never committed
+.deckpreview/
