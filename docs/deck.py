@@ -297,7 +297,7 @@ fig, ax = slide(pdf, "What it does not do, and what comes next",
                 "Stated by us rather than found by you")
 bullets(ax, [
  "**Single-consumer large payloads are slower than a UNIX socket.** 0.82x at 1 MiB, under the determinism-first configuration this project requires. Offered rate, thermal state and busy-spin were each eliminated as causes; the remaining candidates are platform power and frequency properties. Fan-out recovers the case from N=2.",
- "**Fan-out beyond N=2 is unmeasured on adequate hardware.** Two physical cores cannot host one producer and four consumers without oversubscription, so the claim is deliberately limited to what the hardware supports.",
+ "**Consumer count is bounded by core count, on any platform.** In broadcast mode every consumer runs on every message, so one producer plus four consumers oversubscribes a four-core embedded target exactly as it does this one. The crossover sits at N=2, which fits everywhere; we do not claim growth past it.",
  "**p99.99 is not yet quotable.** A smaller jitter source remains; isolcpus / nohz_full / PREEMPT_RT is the work that closes it.",
 ], y=71, size=13, step=5.6, wrap=98, lead_gap=4.2)
 ax.add_patch(FancyBboxPatch((6, 12), 88, 20, boxstyle="round,pad=0.6,rounding_size=0.8",

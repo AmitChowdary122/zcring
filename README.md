@@ -440,12 +440,28 @@ gives each consumer a core to wake onto. **It is therefore not honest to
 quote a notify-mode N=4 number from this machine as a scalability result**,
 in either direction.
 
-**What this costs the headline claim.** "The advantage grows with consumer
-count" is supported to N=2 under the shipping waiter and to N=4 only under a
-flag that no longer exists. Until the sweep is repeated on a machine with
-more physical cores, the defensible statement is the narrower one: *zcring
-loses at N=1 on large payloads and wins from N=2 onward, because publication
-cost is O(1) in N while copying transports are O(N)*.
+**What this costs the headline claim — and why it costs less than it looks.**
+"The advantage grows with consumer count" is supported to N=2 under the
+shipping waiter, and to N=4 only under a flag that no longer exists. The
+defensible statement is the narrower one: *zcring loses at N=1 on large
+payloads and wins from N=2 onward, because publication cost is O(1) in N
+while copying transports are O(N)*.
+
+It is tempting to treat the N=4 result as a limitation of the measurement
+box, to be fixed by borrowing a machine with more cores. That framing is
+wrong, and worth stating plainly because it changes what the number means.
+
+**One producer plus four consumers is oversubscribed on a four-core embedded
+target too.** Every consumer must run on every message in broadcast mode, so
+the practical consumer count on any platform is bounded by available cores —
+that is a property of the deployment, not of the transport or of this
+laptop. Measuring N=4 on eight desktop cores would produce a prettier number
+that is *less* representative of the problem statement, not more.
+
+The useful fact is where the crossover sits, and it sits at **N=2** — which
+fits on every embedded platform in existence, including the two-core parts
+at the bottom of the range. That is the claim, and this hardware can support
+it.
 
 ### Why the fan-out shape is what it is
 

@@ -121,8 +121,14 @@ hatch.
   `--yield`, a flag that no longer exists; under `--notify` N=4 gives 1.24×
   because `FUTEX_WAKE` makes four consumers runnable at once on two physical
   cores and they thunder (64 B N=4: 1.03 µs → 12.3 µs). That is
-  oversubscription, not a transport property, and it needs ≥4 physical cores
-  to measure honestly.
+  oversubscription, not a transport property.
+  **Do not chase this with a bigger machine.** One producer plus four
+  consumers is oversubscribed on a 4-core embedded target too — every
+  consumer runs on every message, so consumer count is bounded by core count
+  on any platform. That is a deployment property, not a measurement defect.
+  The crossover sits at **N=2**, which fits on every embedded part there is,
+  and this hardware measures it fine. A prettier N=8 number from a desktop
+  CPU would be *less* representative of the problem statement, not more.
 - **Small payloads lose their entire advantage under `--notify`** (18.3× →
   0.93× at 64 B) because the syscall comes back. This is derived, not a bug —
   see `zcring.h` §5. **The 18–20× headline is a dedicated-core (spin) number
