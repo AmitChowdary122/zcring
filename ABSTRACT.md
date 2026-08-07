@@ -122,6 +122,19 @@ all benchmark data is scripted and committed.
 - **State the large-payload trade-off before a judge finds it.** Volunteering
   it reads as rigor; being caught on it costs the credibility of everything
   adjacent.
-- Do not mention adaptive notification, the kernel arbitration layer, or
-  dma-buf as claims. They are unbuilt. They belong in a "future work" slide at
-  most, clearly labelled.
+- **Adaptive notification is now BUILT** (8 Aug) and this abstract predates
+  it. It is no longer future work, and it is the project's answer to the
+  **AI / Technical Approach** criterion — a *core* scored criterion this
+  submission would otherwise score zero on, and the source of the form's
+  required **Model Type** answer (**Inbuilt Model**: in-house, purpose-built).
+  This abstract must be revised to include it before submission. Frame it as
+  an online-learned adaptive policy, never as "AI": the spin-then-block
+  threshold is learned per consumer from the observed inter-arrival
+  distribution by a constrained optimisation with a measured objective, with a
+  ski-rental floor and ε-greedy exploration. See `STATUS.md` "Adaptive
+  notification" for the framing and `src/zcring.h` §§5–10 for the derivation.
+- Do not mention the kernel arbitration layer or dma-buf as claims. They are
+  unbuilt. They belong in a "future work" slide at most, clearly labelled.
+- **The fan-out numbers in this abstract were measured with `--yield`**, which
+  has been removed. They remain valid as measured but are no longer
+  reproducible from the tree; see `STATUS.md` before quoting them.

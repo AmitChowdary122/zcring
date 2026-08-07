@@ -1050,3 +1050,202 @@ are both real, both tested at the durations they claim to support.
 This item-25 writeup itself committed and pushed as:
 
     5c16ebd  reports.txt: record the camera fan-out demo session
+
+
+26. Layer 2 adaptive notification: online-learned spin-then-futex threshold,
+    and the busy-spin hypothesis refuted for good
+--------------------------------------------------------------------------
+
+Built the last unstarted piece of Layer 2: adaptive notification. Removed the
+fixed YIELD_SPINS constant and the --yield stopgap entirely; --notify
+replaces both. Full design rationale is in src/zcring.h SS5-SS10 and is
+written to be read by a judge, not just by a maintainer -- this is the
+project's answer to HACKATHON.md's AI/Technical Approach criterion, which is
+a CORE scored criterion the project previously scored zero on.
+
+What the policy actually is (short form; the header has the derivation):
+
+  objective    minimise expected added latency W*(1-F(S)) subject to expected
+               spin cost E[min(X,S)] <= beta*E[X]. beta -- the fraction of an
+               idle gap you'll burn spinning -- is the ONLY policy input.
+               Everything else is measured. That split is the argument.
+  estimator    multiplicative Robbins-Monro quantile update,
+               S <- S + eta*(p - 1[X<S]) with eta = gamma*S, done as two
+               shifts and an add. Scale-free (crosses decades of message rate
+               without retuning) and deliberately non-annealing (an arrival
+               process that changes is one you must keep listening to).
+               Target quantile is set by the ratio of the two shifts:
+               p = 2^DOWN/(2^DOWN+2^UP) = 16/17 at the defaults.
+  budget       enforced against MEASURED E[min(X,S)] (an EWMA of actual spin
+               burned), not against the bound E[min(X,S)] <= S. beta is a
+               shift, so the whole update is division-free.
+  wake cost W  measured, not assumed. The producer stamps CLOCK_MONOTONIC
+               into ctrl->wake_ts immediately before FUTEX_WAKE. Double duty:
+               it measures what sleeping cost, AND it de-censors the arrival
+               sample -- without it every blocked wait reports X+W instead of
+               X, so the estimator gets pushed toward spinning by exactly the
+               outcome that should not do that.
+  floor        ski-rental: S >= measured W, always. 2-competitive and
+               distribution-free. Makes fast-arrival traffic stay
+               syscall-free automatically (gap << W => floor dominates =>
+               never blocks) and slow-arrival traffic block on nearly every
+               message (gap >> W => budget dominates). A fixed constant
+               cannot have both behaviours; that is the whole point.
+  exploration  eps-greedy, eps=1/128, explore at 8x budget. NOT decoration:
+               the greedy policy censors its own observations and cannot
+               distinguish "6% of gaps land just past S" (raise S, nearly
+               free) from "6% of gaps are 100x S" (raising S is pure waste).
+               Extra cost bounded by eps*(m-1)*S < 6% of S, and charged
+               against the same budget so it can't smuggle in unauthorised
+               spend.
+
+ABI: unchanged, still v2. wake_ts fits inside padding _Alignas had already
+reserved in the futex_word cache line (offsets 200-255 were free), and the
+notify flag rides in spare high bits of ctrl->mode. Added _Static_asserts on
+sizeof(zc_ctrl_t) and six field offsets so this is enforced rather than
+claimed -- confirmed byte-identical to the pre-change build (1344 bytes;
+head=64 tail=128 futex_word=192 waiters=196 wake_ts=200 gate_cache=256
+cons=320).
+
+Two implementation decisions worth recording because both were changes of
+direction mid-build:
+
+(a) The wake protocol was written first with atomic_thread_fence(seq_cst) on
+    both sides -- the canonical store-buffer fix, what Folly's EventCount and
+    glibc's condvar do, and correct. Rewrote it because `make tsan` emitted
+    -Wtsan: GCC's ThreadSanitizer does NOT model atomic_thread_fence, it
+    warns and skips. That would have left the single most delicate ordering
+    in the framework as the one thing tsan cannot check -- unacceptable given
+    this project's own stated rule about tsan. Replacement uses a seq_cst
+    read-modify-write on the SAME word from both sides: the consumer does
+    fetch_add(&waiters, 1), the producer does fetch_add(&waiters, 0) purely
+    to read it. RMWs on one object are totally ordered by that object's
+    modification order and each reads the immediately preceding value, so
+    there are exactly two cases and both are safe (producer sees >=1 and
+    wakes; or the consumer's RMW reads-from the producer's release RMW,
+    synchronizes-with it, and therefore sees the message and does not sleep).
+    No fence, TSan models it exactly, and on x86 it costs one uncontended
+    LOCK XADD against an MFENCE. Strictly better on every axis that mattered.
+
+(b) zc_wake() started as a static inline in the header and was moved out of
+    line into zcring.c. Reading the generated assembly showed that inlining
+    it pulled zc_now_ns()'s struct timespec into the caller's frame, which
+    under -fstack-protector-strong (Ubuntu/Debian default) added canary setup
+    and teardown to EVERY zc_commit -- including on rings with notification
+    disabled. That would have quietly invalidated the claim that the
+    non-notify fast path is unchanged, and with it the reproducibility of
+    every committed dataset. After the move, plain zc_commit is: mask, store
+    len, release-store seq, load local r->notify, test, branch, ret. Verified
+    in the assembly, not assumed.
+
+Tests: four new notification tests plus a dedicated lost-wakeup stress test
+that aims at the arm/publish boundary (publish gap swept across 2-14.4us so
+the collision is hit from both sides rather than at one fixed offset the
+policy could settle away from), using a bounded wait so a lost wakeup
+surfaces as a counted timeout instead of a hung CI run. Also asserts the
+policy actually SLEEPS (>50% of waits block at a 200us gap) and actually
+does NOT sleep when arrivals are fast (<5% of 20000), since a policy that
+silently degenerated to spinning would pass every delivery check while
+delivering none of the point. make test and make tsan both clean, no
+warnings in either build.
+
+Convergence, from bench --notify's reported state (64 B, N=1, gap=100us):
+
+    spin=11904ns gap_ewma=97782ns wake_ewma=2068ns burn_ewma=12196ns
+    waits=20766 blocks=20667 (99.5%) explores=170
+
+gap_ewma recovered the true 100us inter-arrival; spin settled at gap_ewma/8,
+i.e. the CPU budget binding exactly as derived; wake cost measured at ~2us;
+explore rate 0.82% against a nominal 1/128 = 0.78%. At 1 MiB the same
+estimator learned a 185us gap -- the REAL inter-arrival, not the 100us
+nominal pacing, because the producer's own 1 MiB write pass slows it down.
+That is the difference between measuring and configuring, and it is worth
+showing a judge directly.
+
+Honest cost, stated rather than buried: at 64 B / 100us gap, p50 goes from
+~128ns (spin) to ~2.2us (notify), because nearly every message now pays a
+wake. sweep.sh therefore still defaults to WAITER=spin, which keeps
+results/sweep.csv reproducible; WAITER=notify produces the blocking variant.
+The two answer different questions (lowest achievable latency given a
+dedicated core, vs latency at an idle CPU cost comparable to a socket) and
+must never be blended into one table.
+
+
+27. The C-state A/B, re-run with a real block/wake cycle: NEGATIVE, plus a
+    new finding that corrects an existing claim
+--------------------------------------------------------------------------
+
+Item 24's --sleep test could not settle whether zcring's busy-spinning
+consumer causes the ~65% large-payload C-state penalty, and said so: the
+cpuidle framework is equally disabled underneath nanosleep(), so that test
+mostly showed nanosleep has its own overhead. It explicitly named a real
+futex block as the test that would settle it. Item 26 built that.
+
+Promoted the experiment to a committed script (scripts/cstate_ab.sh) since
+this A/B has now been run ad hoc three times. 2x2 over waiter (spin, notify)
+x C-states (enabled, disabled), unix as control, 1 MiB, N=1, wait_for_cool()
+before EVERY invocation, 3 reps. Run at two rates, because the original A/B
+(item 22) used gap=100us while the committed dataset uses gap=2000us at
+1 MiB (RATE_FRACTION=25) and it turned out those do not say the same thing.
+
+Machine prep: killed Firefox first (it was on cpu2, the pinned producer
+core -- the exact contamination recorded in STATUS.md's traps list as having
+already invalidated one "after" measurement), governor=performance,
+passwordless sudo for cpupower confirmed.
+
+p50, mean of 3 reps. Every cell's three reps landed within 1-2us.
+
+    gap=100us (item 22's config)      results/cstate_waiter_ab.csv
+    waiter            C-on      C-off     change
+    spin              118.4us   194.0us   +63.9%
+    notify            122.2us   197.5us   +61.6%
+    unix (control)    157.4us   174.0us   +10.5%
+
+    gap=2000us (dataset's rate)       results/cstate_waiter_ab_rate25.csv
+    waiter            C-on      C-off     change
+    spin              106.1us   180.5us   +70.1%
+    notify            197.1us   184.1us    -6.6%
+    unix (control)    243.8us   154.4us   -36.7%
+
+NEGATIVE RESULT, and this time a conclusive one. With C-states disabled,
+zcring costs the same whether the consumer spins or genuinely sleeps: 194.0
+vs 197.5 at gap=100, 180.5 vs 184.1 at gap=2000. The waiter is not the
+mechanism. The hypothesis predicted a real block/wake cycle would recover
+something near the C-states-enabled figure; it recovered nothing.
+
+The -6.6% must not be misread as the penalty shrinking. It is the
+C-states-ENABLED baseline getting worse under notify, and that is a second,
+separate, fully-explained finding: at a 2ms idle gap a blocking consumer's
+core has time to enter a deep C-state, so its wake pays that state's exit
+latency -- ~91us here (notify+C-on 197.1 vs spin+C-on 106.1). The same
+mechanism hits the control, which is how we know it is the mechanism: unix
+is 36.7% FASTER with C-states disabled at this rate.
+
+That corrects a claim this repo has been making since item 22: "pipe/unix
+are not affected by the C-state setting". True at gap=100us, where the idle
+window is too short for the governor to pick a deep state. False at
+gap=2000us. It was a rate-specific observation reported as a general one.
+README.md is fixed; treat any older statement of it as superseded. It also
+strengthens rather than weakens the determinism argument -- disabling deep
+C-states is a requirement for ANY blocking transport's tail, not a zcring
+quirk.
+
+Running tally on the ~65-70% zcring pays at 1 MiB with C-states disabled:
+eliminated as causes are offered rate (item 21), thermal throttling in
+isolation (item 19), and now busy-spin (this item, conclusively). What
+remains are platform properties rather than properties of this code --
+uncore/memory-controller frequency, or a turbo/RAPL budget a
+never-fully-idle package cannot reach. Not worth more time before the
+deadline. It is disclosed either way, and the fan-out crossover is what wins
+the large-payload case back regardless of mechanism.
+
+Left the machine with C-states re-enabled, per RUNNING.md.
+
+Not done, and flagged loudly in STATUS.md rather than left to be discovered:
+removing --yield made results/fanout.csv and fanout_verify.csv historical.
+They are still valid as measured and are still what the fan-out crossover
+claim rests on, but they cannot be regenerated from this tree and must not
+share a table with any notify-mode number. scripts/fanout.sh now runs
+--notify. Regenerating that sweep is the highest-value measurement
+outstanding; it is also the first real test of whether notification removes
+the 64 B / N=4 spinner-oversubscription artifact.

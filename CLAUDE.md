@@ -38,10 +38,12 @@ add *AI/Technical Approach*, *Security*, *Documentation Quality*, *User
 Experience*, and score the **architecture diagram itself**. Two consequences
 worth carrying here:
 
-- **AI/ML is a CORE criterion and this project has none.** The submission form
-  requires a Model Type. The honest answer is the adaptive spin-then-futex
-  threshold learned online from inter-arrival distributions — already the next
-  work item. Do not bolt on an LLM. See HACKATHON.md.
+- **AI/ML is a CORE criterion. As of 8 Aug the project has an answer.** The
+  adaptive spin-then-futex threshold, learned online from the observed
+  inter-arrival distribution, is **built** — see STATUS.md "Adaptive
+  notification" and `src/zcring.h` §§5–10. Model Type on the form is
+  **Inbuilt Model**. Frame it as an online-learned adaptive policy, never as
+  "AI". Do not bolt on an LLM. See HACKATHON.md.
 - **Security is scored**, which promotes Layer 3 kernel arbitration: it now
   scores on both *Novelty* and *Security*.
 
@@ -103,8 +105,14 @@ hatch.
 - **Large payloads (256 KiB–1 MiB) LOSE to a UNIX socket at N=1** (0.68×–
   0.84×), under the C-state-disabled configuration this project requires for
   the small-message determinism claim below. Confirmed independent of
-  thermal state and offered rate — a real, disclosed trade-off, not a bug or
+  thermal state, offered rate, **and (8 Aug) of whether the consumer spins or
+  genuinely blocks on a futex** — a real, disclosed trade-off, not a bug or
   measurement artifact. See README.md's "Why large payloads lose here".
+  **Superseded sub-claim:** "pipe/unix are not affected by the C-state
+  setting" was rate-specific and is now known to be false at low message
+  rates — at a 2 ms gap, unix is 36.7% *faster* with C-states disabled,
+  because a blocking consumer's core pays idle-state exit latency on wake.
+  Do not repeat the old general form.
 - **Fan-out wins the large-payload case back, decisively, from N=2 on.** At
   1 MiB: 0.82× at N=1, 1.38× at N=2, 2.03× at N=4 — zcring's per-consumer
   cost stays flat while pipe/unix pay a full extra copy per consumer. A
@@ -196,24 +204,26 @@ suggest. Still gated on Layers 1–2 being solid.
 
 ## Next tasks, in order
 
-1. **Layer 2 — adaptive notification.** Spin on the sequence counter for N ns,
-   then `FUTEX_WAIT`; producer issues `FUTEX_WAKE` only when a waiter flag is
-   set. Fields `futex_word` and `waiters` already exist in `zc_ctrl_t` so the
-   shared ABI does not change. Also: `eventfd` bridge for `epoll` composition.
-   - Note: the current benchmark's zcring consumer **spins** while pipe/unix
-     consumers block, so idle CPU cost is not yet comparable. This is the
-     honest fix for that asymmetry.
-2. **Layer 2 — fan-out.** One producer, N consumers, per-consumer cursors,
-   each reading the same buffer with zero copies. Rubric-critical.
-3. **Layer 2 — crash recovery.** A producer dying mid-`reserve` currently
-   leaks that slot. Needs stale-slot reclamation with bounded recovery time.
-4. **Determinism rigor.** p99/p99.9/p99.99 histograms, jitter under
+1. ~~**Layer 2 — adaptive notification.**~~ **DONE 8 Aug.** Spin-then-futex
+   with the budget learned online; `--yield`/`YIELD_SPINS` removed, `--notify`
+   replaces them. ABI still v2 (statically asserted). TSan clean. Remaining
+   piece of this item: the `eventfd` bridge for `epoll` composition.
+2. **Regenerate the fan-out sweep under `--notify`.** Removing `--yield` made
+   `results/fanout.csv` historical — still valid as measured, no longer
+   reproducible, and it is what the fan-out crossover claim rests on. Highest-
+   value measurement outstanding. See STATUS.md.
+3. ~~**Layer 2 — fan-out.**~~ **DONE.** One producer, N consumers,
+   per-consumer cursors, zero copies for all.
+4. **Layer 2 — producer crash recovery.** A producer dying mid-`reserve`
+   currently leaks that slot. Needs stale-slot reclamation with bounded
+   recovery time. (Consumer death is already handled by `zc_bcast_reap()`.)
+5. **Determinism rigor.** p99/p99.9/p99.99 histograms, jitter under
    `stress-ng`, `isolcpus`, PREEMPT_RT if feasible. This is the top
    differentiator — the statement asks for *deterministic* communication and
    most teams will report means.
-5. **Comparators.** Add iceoryx and ZeroMQ to the sweep. Benchmarking against
+6. **Comparators.** Add iceoryx and ZeroMQ to the sweep. Benchmarking against
    iceoryx rather than only pipes signals awareness of the actual field.
-6. **Demo + presentation.** Reserved for the final week. Do not spend it
+7. **Demo + presentation.** Reserved for the final week. Do not spend it
    coding.
 
 ## Shared memory across machines and sessions

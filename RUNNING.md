@@ -83,7 +83,7 @@ Useful flags: `--size` `--count` `--warmup` `--gap-us` `--cpu-prod` `--cpu-cons`
 ## 3a. Fan-out (Layer 2)
 
 ```bash
-./build/bench --transport=zcring --consumers=4 --size=4096 --touch --yield \
+./build/bench --transport=zcring --consumers=4 --size=4096 --touch --notify \
               --cpu-prod=2 --cpu-cons=3,1
 make fanout                                       # full N x payload sweep
 REPS=5 COUNT=50000 GAP=100 ./scripts/fanout.sh    # submission-grade
@@ -98,12 +98,16 @@ if you skip them:
   ~185× — it was measured on this machine, it is not hypothetical.
   `scripts/fanout.sh` derives the list from `thread_siblings_list`; check the
   two lines it prints.
-- **Use `--yield` for anything with N above 2 on a small machine.** zcring
-  waiters spin; at N=4 on two physical cores there are more spinners than
-  hardware threads and you measure scheduler thrash, not fan-out. Pure spin
-  reports p50 = 90 µs at 4 KiB; `--yield` reports 2.1 µs for the same
-  configuration. Keep the flag consistent across every row you intend to
-  compare.
+- **Use `--notify` for anything with N above 2 on a small machine.** zcring
+  waiters spin by default; at N=4 on two physical cores there are more
+  spinners than hardware threads and you measure scheduler thrash, not
+  fan-out. Pure spin reports p50 = 90 µs at 4 KiB; the old `--yield` stopgap
+  reported 2.1 µs for the same configuration. `--notify` replaces it with the
+  adaptive spin-then-futex waiter, which blocks when blocking pays instead of
+  guessing a fixed spin count. Keep the flag consistent across every row you
+  intend to compare — and note that `results/fanout.csv` was measured under
+  `--yield`, which no longer exists, so it cannot share a table with
+  `--notify` numbers (see `STATUS.md`).
 - **`--consumers` selects zcring's broadcast path even at N=1**, so fan-out
   rows are comparable to each other. Omitting it keeps the Layer 1 unicast
   path, which is what `sweep.csv` was measured with. The two are therefore not
@@ -142,7 +146,7 @@ latencies (`cat /sys/devices/system/cpu/cpu*/cpuidle/state*/{name,latency}`):
 | state2 | C2_ACPI | 253 µs |
 | state3 | C3_ACPI | 1048 µs |
 
-A consumer that spins with `--yield` at a 100 µs gap is idle enough between
+A consumer that yields or blocks at a 100 µs gap is idle enough between
 messages that the cpuidle governor sometimes predicts a long sleep and picks
 C3. Waking from C3 costs up to 1048 µs, and that cost lands directly in the
 tail. Measured effect at 64 B, N=1, 5 reps of 50000 messages each:
@@ -204,9 +208,11 @@ heat generated per size), and `sweep.sh`/`fanout.sh` iterate sizes ascending
 (small → large), so heat accumulates monotonically right into the sizes that
 matter most for the large-payload story. zcring degrades more than pipe/unix
 under heat because its consumer busy-spins the whole gap (generating its own
-heat) where pipe/unix block in `read()` — another concrete cost of the
-missing adaptive-notification work (§ next tasks in `STATUS.md`), not just
-the fairness issue already documented.
+heat) where pipe/unix block in `read()`. Running the sweep with
+`WAITER=notify` makes the zcring consumer block too and removes that
+asymmetry — but note that it does **not** remove the separate ~65–70%
+large-payload C-state cost, which was tested directly and is not caused by
+the waiter (`scripts/cstate_ab.sh`, `STATUS.md` Open problem #5 follow-up 2).
 
 **Fix:** `scripts/lib.sh`'s `wait_for_cool()` checks the package thermal
 zone (`x86_pkg_temp`, falling back to `TCPU`) before starting each payload
@@ -238,7 +244,7 @@ than large bulk transfers where possible.
 | `make test` passes but tsan reports races | trust tsan; the ring is wrong |
 | huge variance between identical runs | machine is not quiet enough to measure on |
 | zcring p50 fine but p99 in milliseconds at N>1 | a consumer is on the producer's SMT sibling |
-| zcring p50 in tens of µs at N=4 | spinner oversubscription; you need `--yield` |
+| zcring p50 in tens of µs at N=4 | spinner oversubscription; you need `--notify` |
 | fan-out consumer count doesn't change zcring latency much | expected — publication is O(1) in N. That is the result, not a bug |
 | p99.9 wildly different between otherwise-identical reps (some fine, one in the hundreds of µs / ms) | deep C-state entry — see §4a, run `sudo cpupower idle-set -D 0` |
 | large-payload zcring p50 degrades progressively over the course of a sweep, worse than pipe/unix's degradation | package thermal throttling — see §4b, check `thermal_zone*/temp`, let `wait_for_cool()` do its job |

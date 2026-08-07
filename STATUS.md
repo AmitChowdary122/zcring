@@ -1,6 +1,6 @@
 # STATUS — session handoff
 
-Last updated: 1 Aug 2026. Read this after `CLAUDE.md` and before doing
+Last updated: 8 Aug 2026. Read this after `CLAUDE.md` and before doing
 anything. It records decisions and open problems that exist nowhere in the
 code, and that a fresh session will otherwise get wrong.
 
@@ -11,9 +11,32 @@ code, and that a fresh session will otherwise get wrong.
   cursors, min-cursor gating, backpressure (not drop), join/departure/reap
   handshake. ABI v2. TSan clean. Design rationale is in the header block of
   `src/zcring.h` — read it before changing anything there.
-- **Not started**: adaptive spin-then-futex notification, crash recovery for
-  producers, determinism rigor (isolcpus / nohz_full / PREEMPT_RT), iceoryx
-  and ZeroMQ comparators, demo, presentation.
+- **Layer 2 adaptive notification complete** (8 Aug) — spin-then-futex with
+  the spin budget learned online from the observed inter-arrival
+  distribution. `--yield` and `YIELD_SPINS` are **removed**; `--notify` is
+  the replacement. **ABI still v2** — nothing in `zc_ctrl_t` moved, and
+  `_Static_assert`s in the header now enforce that. TSan clean. Full
+  derivation in `src/zcring.h` §§5–10. See "Adaptive notification" below for
+  what a fresh session needs to know.
+- **Not started**: `eventfd`/`epoll` bridge, crash recovery for producers,
+  determinism rigor (isolcpus / nohz_full / PREEMPT_RT), iceoryx and ZeroMQ
+  comparators, presentation.
+
+## Read this before quoting any fan-out number
+
+`results/fanout.csv` and `results/fanout_verify.csv` were measured with
+`--yield`, which no longer exists. They are still valid *as measured* and are
+still what the fan-out crossover claim (0.82× → 1.38× → 2.03× at 1 MiB) rests
+on, but they **cannot be regenerated from this tree** and **must not appear in
+the same table as a notify-mode number**. `scripts/fanout.sh` now runs
+`--notify`. Regenerating that sweep is the highest-value measurement
+outstanding — it is also the first real test of whether adaptive notification
+removes the 64 B / N=4 spinner-oversubscription artifact (1.03 µs vs ~120 ns
+at N=1/2), which it should.
+
+`results/sweep.csv` is unaffected: `scripts/sweep.sh` still defaults to
+`WAITER=spin`, deliberately, so the committed baseline stays reproducible.
+`WAITER=notify` produces the blocking-consumer variant.
 
 ## Open problem #1 — the offered-rate inconsistency — RESOLVED, same-day follow-up session
 
@@ -252,6 +275,103 @@ finding is disclosed as a trade-off in README.md regardless of mechanism.
 `--sleep` stays in `bench.c` as a diagnostic flag (not used by any
 committed sweep) in case someone picks this back up.
 
+## Adaptive notification — what a fresh session needs to know
+
+Built 8 Aug. This is the project's answer to the hackathon's **AI / Technical
+Approach** criterion (see `HACKATHON.md` — it is a *core* scored criterion and
+the project previously scored zero on it). Frame it as an online-learned
+adaptive policy, never as "AI". The submission form's **Model Type** answer is
+**Inbuilt Model**: in-house, purpose-built, and justified in the header.
+
+**The claim, in one line:** the spin-then-block threshold is not a constant —
+it is learned online, per consumer, from the observed inter-arrival
+distribution, by a constrained optimisation with a measured objective.
+
+Design decisions that a later session must not silently undo:
+
+- **The CPU budget β is a policy input; everything else is measured.** That
+  split is the whole argument. Do not add a configurable spin constant "for
+  convenience" — it re-opens exactly the criticism this work exists to close.
+- **The ski-rental floor `S ≥ measured wake cost` is load-bearing.** It is
+  what makes fast-arrival traffic stay syscall-free automatically and what
+  bounds the learner's worst case by the distribution-free 2-competitive
+  policy. Removing it would make the policy pathological at high message rates.
+- **Exploration is not decoration.** The greedy policy censors its own
+  observations. §8 of the header explains why; a reviewer asking "why is there
+  an ε here" needs that answer and it is written down.
+- **`wake_ts` in the control block does double duty** — measures the wake cost
+  *and* de-censors the arrival sample. Both matter; it is not just telemetry.
+- **The wake protocol uses same-location seq_cst RMWs, not fences,
+  deliberately.** It was written with `atomic_thread_fence` first — which is
+  correct and is what Folly/glibc do — and changed because **GCC's TSan does
+  not model `atomic_thread_fence`** (it warns `-Wtsan` and skips it). That
+  would have left the most delicate ordering in the framework as the one thing
+  `make tsan` could not check. Do not "simplify" the producer's
+  `atomic_fetch_add(&waiters, 0, seq_cst)` into an `atomic_load`: the load
+  carries no such guarantee and the resulting lost wakeup is a hang, not a
+  slowdown. The comment at that line says so.
+- **`zc_wake()` is out of line on purpose.** Inlining it pulls
+  `zc_now_ns()`'s `struct timespec` into the caller's frame, which under
+  `-fstack-protector-strong` (Ubuntu default) adds canary setup to *every*
+  `zc_commit` including on non-notify rings. Verified in the generated
+  assembly; the non-notify commit is a store plus a predicted branch, exactly
+  as before.
+- **Notification is opt-in at creation**, so `results/sweep.csv`'s methodology
+  is unchanged and still reproducible.
+
+**It demonstrably converges** — `bench --notify` prints the learned state.
+At 64 B / 100 µs gap it recovered gap_ewma = 97.8 µs against a true 100 µs,
+settled spin at gap/8 (the budget binding exactly as derived), measured the
+wake cost at ~2 µs, and explored 0.82% against a nominal 0.78%. At 1 MiB it
+learned a 185 µs gap — the *real* inter-arrival, not the 100 µs nominal, since
+the producer's own 1 MiB write pass slows it down.
+
+**Honest cost:** at 64 B / 100 µs gap, p50 goes ~128 ns (spin) → ~2.2 µs
+(notify). Blocking is not free. Report the two modes as answers to different
+questions, never blended.
+
+## Open problem #5, follow-up 2 — busy-spin hypothesis refuted properly (8 Aug)
+
+`reports.txt` §24's `--sleep` test could not settle whether zcring's
+busy-spinning consumer causes the ~65% large-payload C-state penalty, because
+`nanosleep()` is not a real block/wake cycle either. It named a real futex
+block as the test that would. That test now exists.
+
+`scripts/cstate_ab.sh` (committed — this A/B has now been run ad hoc three
+times, so it is a script). 1 MiB, N=1, cooled before every invocation, 3 reps,
+2×2 over waiter × C-state, unix as control. Run at both rates:
+
+| | gap 100 µs (§22's config) | gap 2000 µs (this dataset's rate) |
+|---|---|---|
+| spin, C-states on → off | 118.4 → 194.0 µs (+63.9%) | 106.1 → 180.5 µs (+70.1%) |
+| notify, C-states on → off | 122.2 → 197.5 µs (+61.6%) | 197.1 → 184.1 µs (−6.6%) |
+| unix control, on → off | 157.4 → 174.0 µs (+10.5%) | 243.8 → 154.4 µs (−36.7%) |
+
+Raw: `results/cstate_waiter_ab.csv`, `results/cstate_waiter_ab_rate25.csv`.
+Every cell is 3 reps within 1–2 µs.
+
+**NEGATIVE RESULT.** With C-states disabled, zcring costs the same whether the
+consumer spins or sleeps (194.0 vs 197.5; 180.5 vs 184.1). The waiter is not
+the mechanism. Do not re-run this hypothesis.
+
+**Read the −6.6% carefully — it is not the penalty shrinking.** It is the
+C-states-*enabled* baseline getting worse under notify, because at a 2 ms idle
+gap a blocking consumer's core enters a deep C-state and its wake pays that
+exit latency (~91 µs here). That is a *new*, fully-explained finding, and it
+hits the control too: **unix is 36.7% faster with C-states disabled at this
+rate.**
+
+**This corrects a claim currently in README/reports:** "pipe/unix are not
+affected by the C-state setting" is true at a 100 µs gap and false at 2000 µs.
+It was rate-specific and was reported as general. README is fixed; treat any
+older statement of it as superseded.
+
+Eliminated so far as causes of the ~65–70%: offered rate (#1), thermal (#4),
+busy-spin (this). Remaining candidates are platform properties, not properties
+of this code — uncore/memory-controller frequency, or a turbo/RAPL budget an
+never-fully-idle package cannot reach. Not worth more time before the
+deadline; it is disclosed either way.
+
 ## Traps already hit once — do not repeat
 
 - **`--touch` is mandatory.** Without it the harness moves 8 bytes and
@@ -260,8 +380,10 @@ committed sweep) in case someone picks this back up.
 - **Never pin a consumer to the producer's SMT sibling.** Did this once;
   p50 looked fine while p99 was inflated 185×.
 - **Spinning consumers oversubscribe.** At N=4 on 4 hardware threads the
-  benchmark measured scheduler thrash, a 40× artifact. `--yield` is the
-  current stopgap; adaptive futex notification is the real fix.
+  benchmark measured scheduler thrash, a 40× artifact. `--yield` was the
+  stopgap; adaptive futex notification (`--notify`, 8 Aug) is the real fix,
+  and `scripts/fanout.sh` now uses it. How much of the artifact it actually
+  removes is not yet measured — see the fan-out note at the top of this file.
 - **`git add -A` in the Windows working tree is unsafe.** That tree only ever
   has current doc edits; everything else in it is stale. Once silently
   reverted a Makefile fix and clobbered a bare-metal dataset. Stage files by
@@ -292,17 +414,24 @@ committed sweep) in case someone picks this back up.
    same-day follow-up session — see Open problems #1, #4, #5.
 2. ~~Demo/pipeline.~~ **Done**, follow-up session — see "Demo pipeline
    results" below.
-3. Optional but recommended: live-USB scaling run on the Ryzen for N=8.
+3. ~~Adaptive spin-then-futex notification.~~ **Done**, 8 Aug — see
+   "Adaptive notification" above. It also settled the busy-spin hypothesis
+   (Open problem #5, follow-up 2): negative, conclusively.
+4. **Regenerate the fan-out sweep under `--notify`.** `results/fanout.csv`
+   is now historical (measured with the removed `--yield`) and the fan-out
+   crossover claim rests on it. Highest-value measurement outstanding, and
+   it doubles as the first test of whether notification removes the 64 B /
+   N=4 spinner artifact. *Sonnet* — it is a script run, not a design task.
+   Needs a quiet machine and a few hours of thermal-gated wall clock.
+5. **Draft the abstract.** Target submission 8–10 Aug; window closes 25 Aug.
+   *Opus.* Nothing is blocking this — but the abstract now has a real
+   answer for the AI/Technical Approach criterion and Model Type, which it
+   did not have before. See "Adaptive notification" above for the framing
+   and "The story the abstract should tell" below for the numbers.
+6. Optional but recommended: live-USB scaling run on the Ryzen for N=8.
    *Sonnet.* Do this only if the abstract will claim scaling beyond N=2.
-4. **Draft the abstract.** Target submission 8–10 Aug; window closes 25 Aug.
-   *Opus.* Nothing is blocking this now — see "The story the abstract
-   should tell" below for the numbers to use.
-5. Adaptive spin-then-futex notification — removes the `--yield` stopgap,
-   makes idle CPU cost comparable to the blocking comparators, and (per
-   Open problem #5's negative result) is the only remaining way to test
-   the busy-spin/power-budget hypothesis properly. *Opus, and only after
-   the abstract.*
-6. Producer crash recovery; determinism rigor (isolcpus / nohz_full /
+7. `eventfd`/`epoll` bridge (the remaining piece of Layer 2 notification);
+   producer crash recovery; determinism rigor (isolcpus / nohz_full /
    PREEMPT_RT); iceoryx and ZeroMQ comparators; presentation.
 
 `reports.txt` holds the full Layer 1 and Layer 2 session reports, including
