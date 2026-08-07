@@ -394,8 +394,62 @@ above, `--touch --yield`, mean of 5 reps. Raw data in `results/fanout.csv`.
 | 1 MiB | 2 | 189 µs | 617 µs | 261 µs | **1.38×** |
 | 1 MiB | 4 | 203 µs | 951 µs | 412 µs | **2.03×** |
 
-**This is the actual scalability result, and it's a better story than a flat
-multiplier.** zcring's per-consumer cost is nearly flat as N grows —
+### The same sweep under `--notify` — reproducible, and weaker
+
+`results/fanout_notify.csv`, REPS=5, identical configuration except that the
+consumer uses the adaptive spin-then-futex waiter instead of the removed
+`--yield` stopgap. **This is the table that regenerates from the current
+tree.**
+
+| payload | N | zcring | pipe | unix | vs. best | (was, `--yield`) |
+|---|---|---|---|---|---|---|
+| 64 B | 1 | 2.3 µs | 2.2 µs | 3.1 µs | 0.93× | 18.3× |
+| 64 B | 2 | 3.0 µs | 3.1 µs | 4.3 µs | 1.04× | 27.1× |
+| 64 B | 4 | 12.3 µs | 5.5 µs | 6.4 µs | 0.45× | 5.5× |
+| 4 KiB | 1 | 2.9 µs | 2.7 µs | 4.2 µs | 0.94× | 3.30× |
+| 4 KiB | 2 | 3.5 µs | 3.7 µs | 5.6 µs | 1.07× | 5.08× |
+| 4 KiB | 4 | 12.7 µs | 6.2 µs | 8.2 µs | 0.49× | 3.86× |
+| 1 MiB | 1 | 188 µs | 351 µs | 154 µs | 0.82× | 0.82× |
+| 1 MiB | 2 | 188 µs | 635 µs | 256 µs | **1.36×** | 1.38× |
+| 1 MiB | 4 | 337 µs | 986 µs | 417 µs | 1.24× | 2.03× |
+
+Three separate things are happening here and they must not be blurred.
+
+**Small payloads lose their advantage entirely, and that is the mechanism
+working as derived.** At 64 B the whole gap over a pipe was syscall
+elimination. A consumer that blocks makes a syscall, so it gives that back:
+120 ns → 2.3 µs. Nothing is broken. It is the cost the constrained objective
+in `src/zcring.h` §5 explicitly trades latency for CPU to buy, and it turns
+out to be a cliff rather than a slope. **This is why `sweep.sh` still defaults
+to `WAITER=spin`, and why the headline small-message number is a
+dedicated-core number** — which real-time embedded deployments routinely
+provide, and which must be stated rather than assumed.
+
+**The copy advantage survives blocking, which is the important part.** At
+1 MiB, N=1 and N=2 are unchanged to within noise (0.82× and 1.36× against
+0.82× and 1.38×). Blocking costs a syscall; it does not reintroduce a copy.
+The crossover — lose at N=1, win from N=2 — is intact and now reproducible.
+
+**N=4 is a wake storm, and it is the two-core ceiling again.** 64 B at N=4
+went 1.03 µs → 12.3 µs. Every publish issues `FUTEX_WAKE(INT_MAX)`, all four
+consumers become runnable at once, and four runnable threads land on two
+physical cores. Under `--yield` they polled and the scheduler timesliced
+them; under `--notify` they thunder. This is oversubscription, not a property
+of the transport — the same configuration on four or more physical cores
+gives each consumer a core to wake onto. **It is therefore not honest to
+quote a notify-mode N=4 number from this machine as a scalability result**,
+in either direction.
+
+**What this costs the headline claim.** "The advantage grows with consumer
+count" is supported to N=2 under the shipping waiter and to N=4 only under a
+flag that no longer exists. Until the sweep is repeated on a machine with
+more physical cores, the defensible statement is the narrower one: *zcring
+loses at N=1 on large payloads and wins from N=2 onward, because publication
+cost is O(1) in N while copying transports are O(N)*.
+
+### Why the fan-out shape is what it is
+
+zcring's per-consumer cost is nearly flat as N grows —
 publication is one release store regardless of consumer count — while
 pipe/unix pay a full extra copy (and, for pipe/unix, a full extra syscall
 round trip) per additional consumer. At 1 MiB that means zcring *loses* at

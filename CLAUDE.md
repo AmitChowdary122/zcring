@@ -113,11 +113,21 @@ hatch.
   rates — at a 2 ms gap, unix is 36.7% *faster* with C-states disabled,
   because a blocking consumer's core pays idle-state exit latency on wake.
   Do not repeat the old general form.
-- **Fan-out wins the large-payload case back, decisively, from N=2 on.** At
-  1 MiB: 0.82× at N=1, 1.38× at N=2, 2.03× at N=4 — zcring's per-consumer
-  cost stays flat while pipe/unix pay a full extra copy per consumer. A
-  genuine crossover, which is a stronger scalability story than a flat
-  multiplier would have been.
+- **Fan-out wins the large-payload case back from N=2 on.** At 1 MiB:
+  **0.82× at N=1, 1.36× at N=2** under the shipping `--notify` waiter
+  (`results/fanout_notify.csv`). A genuine crossover — publication is O(1) in
+  N, copying transports are O(N).
+  **Do NOT claim growth past N=2.** The old 2.03× at N=4 was measured under
+  `--yield`, a flag that no longer exists; under `--notify` N=4 gives 1.24×
+  because `FUTEX_WAKE` makes four consumers runnable at once on two physical
+  cores and they thunder (64 B N=4: 1.03 µs → 12.3 µs). That is
+  oversubscription, not a transport property, and it needs ≥4 physical cores
+  to measure honestly.
+- **Small payloads lose their entire advantage under `--notify`** (18.3× →
+  0.93× at 64 B) because the syscall comes back. This is derived, not a bug —
+  see `zcring.h` §5. **The 18–20× headline is a dedicated-core (spin) number
+  and must be stated as such.** `sweep.sh` defaults to `WAITER=spin` for
+  exactly this reason.
 
 **Two earlier versions of this file made claims that did not survive
 follow-up measurement.** First a "~2× floor" at 1 MiB (VM data, wrong on
