@@ -196,6 +196,7 @@ int main(int argc, char **argv)
     int      ncons_cpu = 0;
     int      csv = 0, touch = 0, use_notify = 0, use_sleep = 0;
     int      nc = 1, nc_given = 0;
+    int      huge_policy = ZC_HUGE_AUTO;
 
     for (int i = 1; i < argc; i++) {
         if (!strncmp(argv[i], "--transport=", 12)) {
@@ -220,6 +221,12 @@ int main(int argc, char **argv)
         else if (!strncmp(argv[i], "--consumers=", 12)) {
             nc = atoi(argv[i] + 12); nc_given = 1;
         }
+        else if (!strncmp(argv[i], "--pages=", 8)) {
+            const char *v = argv[i] + 8;
+            huge_policy = !strcmp(v, "4k")   ? ZC_HUGE_OFF
+                        : !strcmp(v, "huge") ? ZC_HUGE_REQUIRE
+                                             : ZC_HUGE_AUTO;
+        }
         else if (!strcmp(argv[i], "--csv")) csv = 1;
         else if (!strcmp(argv[i], "--touch")) touch = 1;
         else if (!strcmp(argv[i], "--notify")) use_notify = 1;
@@ -227,7 +234,8 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--help")) {
             printf("usage: %s [--transport=zcring|pipe|unix] [--size=N] [--count=N]\n"
                    "          [--warmup=N] [--gap-us=N] [--cpu-prod=N] [--cpu-cons=A,B,..]\n"
-                   "          [--consumers=N] [--touch] [--notify] [--sleep] [--csv]\n"
+                   "          [--consumers=N] [--touch] [--notify] [--sleep]\n"
+                   "          [--pages=auto|4k|huge] [--csv]\n"
                    "  --cpu-cons   CPU list; consumer k pins to the k'th entry, wrapping.\n"
                    "               Must not include the producer's SMT sibling.\n"
                    "  --touch      produce and consume every payload cache line (fair mode)\n"
@@ -247,7 +255,13 @@ int main(int argc, char **argv)
                    "               Passing this selects zcring's broadcast path even at\n"
                    "               N=1, so fan-out rows stay comparable to each other;\n"
                    "               omitting it keeps the Layer 1 unicast path used by the\n"
-                   "               baseline sweep.\n",
+                   "               baseline sweep.\n"
+                   "  --pages      arena backing. auto (default) takes huge pages when the\n"
+                   "               system can serve them and falls back silently; 4k forces\n"
+                   "               the ordinary page layout; huge FAILS rather than falls\n"
+                   "               back, so an A/B arm cannot silently measure the control\n"
+                   "               twice. The path actually taken is printed to stderr as\n"
+                   "               'pages=' -- record that, not the flag that was asked for.\n",
                    argv[0]);
             return 0;
         }
@@ -297,11 +311,25 @@ int main(int argc, char **argv)
     for (int k = 0; k < MAX_CONS; k++) { fds[k][0] = -1; fds[k][1] = -1; }
 
     if (transport == T_ZCRING) {
+        zc_set_hugepage_policy(huge_policy);
         int rc = bcast ? (notify ? zc_create_bcast_notify(&ring, slots, size)
                                  : zc_create_bcast(&ring, slots, size))
                        : (notify ? zc_create_notify(&ring, slots, size)
                                  : zc_create(&ring, slots, size));
-        if (rc != 0) { perror("zc_create"); return 1; }
+        if (rc != 0) {
+            perror("zc_create");
+            if (huge_policy == ZC_HUGE_REQUIRE)
+                fprintf(stderr, "  --pages=huge is strict: reserve the pool first,\n"
+                                "  e.g. sudo sysctl vm.nr_hugepages=%zu\n",
+                        (size_t)(((uint64_t)slots * size) /
+                                 (zc_hugepage_size() ? zc_hugepage_size()
+                                                     : (1u << 21))) + 2);
+            return 1;
+        }
+        /* Before the fork, so it is reported once and reports the creator's
+         * mapping. The arm label a script passes in says what was asked for;
+         * only this says what was granted. */
+        fprintf(stderr, "  pages=%s\n", zc_backing_name(zc_backing(&ring)));
     } else {
         for (int k = 0; k < nc; k++) {
             int rc = (transport == T_PIPE)

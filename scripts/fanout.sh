@@ -96,8 +96,10 @@ for n in $NCONS; do
     for rep in $(seq 1 "$REPS"); do
       for t in zcring pipe unix; do
         printf 'N=%s %-7s size=%-8s n=%-7s gap=%-6s rep=%s\n' "$n" "$t" "$size" "$c" "$gap" "$rep" >&2
+        # --pages=4k: see the note in sweep.sh. This dataset must not
+        # depend on a machine-wide sysctl that is not part of the setup.
         $BENCH --transport="$t" --consumers="$n" --size="$size" --count="$c" \
-               --gap-us="$gap" --touch --notify \
+               --gap-us="$gap" --touch --notify --pages=4k \
                --cpu-prod="$PROD" --cpu-cons="$CONS" --csv >> "$OUT"
       done
     done

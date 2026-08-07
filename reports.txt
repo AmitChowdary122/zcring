@@ -1366,3 +1366,127 @@ design task, and it doubles as the first measurement of whether adaptive
 notification removes the 64 B / N=4 spinner-oversubscription artifact
 (1.03us against ~120ns at N=1/2). That should be the next session's work,
 before the abstract is finalised.
+
+
+29. Huge-page backing for the arena: built, with the A/B still owed --
+    and one negative result already banked
+--------------------------------------------------------------------------
+
+Item 27 closed the list of *code* explanations for the ~65-70% zcring pays
+at 1 MiB with C-states disabled, and named what was left as "platform
+properties". One candidate on that list is cheap to test and is not
+really a platform property at all: address translation.
+
+The arithmetic. At a 1 MiB payload with 4 KiB pages, one message spans 256
+pages. The producer walks 256 PTEs writing it; the consumer walks 256 more
+reading it, in a different address space with its own TLB entries for the
+same physical pages. The L1 dTLB on this part holds ~64 entries, so every
+message misses it comprehensively, twice, and the second-level TLB and page
+walker absorb the rest. A 2 MiB page makes the same message one PTE per
+side. If translation is a material part of the gap, forcing huge pages has
+to move the number.
+
+What was built (src/zcring.h §11, src/zcring.c):
+
+  - ZC_HUGE_AUTO, the default: try MFD_HUGETLB on the memfd; if that fails,
+    a normal memfd with the arena madvise(MADV_HUGEPAGE)'d; if that fails,
+    4 KiB pages. Fallback is silent and unconditional by design. Embedded
+    kernels routinely ship without hugetlbfs, and an IPC framework that
+    refuses to start there has traded its entire target platform for a TLB
+    optimisation.
+  - ZC_HUGE_OFF reproduces the pre-§11 layout byte for byte, which is what
+    keeps everything in results/ regenerable.
+  - ZC_HUGE_REQUIRE fails creation rather than falling back. It exists for
+    benchmark arms: an arm that quietly gets 4 KiB pages measures the
+    control twice and reports a null result as a confirmed one.
+  - The arena's FILE OFFSET is aligned to the huge-page boundary, and the
+    mapping is placed at a huge-aligned VIRTUAL address (PROT_NONE
+    reservation, then MAP_FIXED into the aligned middle, then the slack
+    unmapped -- in that order, so no window exists where another thread's
+    mmap could take the address). Both are required: mmap(NULL) gives page
+    alignment and nothing more, and THP will not use a PMD for a region
+    that does not start on a 2 MiB boundary. Getting only one of the two
+    right yields a madvise that succeeds and does nothing.
+  - The control block and slot array live in the first huge page and are
+    deliberately NOT advised. They are a few cache lines that want to stay
+    where they are, not 2 MiB of hot TLB entry.
+  - AUTO attempts huge backing only when the arena is >= 4 huge pages
+    (ZC_HUGE_MIN_PAGES). A 64 KiB arena rounded up to 2 MiB would consume
+    32x its size from a scarce global pool to save TLB misses it was never
+    taking. In practice this means the mechanism only ever engages at large
+    payloads -- which is the only regime it was hypothesised to help.
+
+ABI is UNCHANGED at v2. Both flags (F_HUGETLB, F_HUGEALIGN) ride in spare
+high bits of ctrl->mode, the same trick §9 used for notification, so
+zc_ctrl_t is byte-for-byte identical and the six _Static_asserts on its
+layout still pass untouched.
+
+One real bug found while writing it, worth recording because it would have
+been invisible until the pool ran dry mid-sweep: zc_attach() peeked the
+control block with mmap(sizeof(zc_ctrl_t)) and munmap'd the same length. On
+a hugetlbfs-backed fd the kernel rounds a mapping's length up to the huge
+page size, so that maps 2 MiB and the 1344-byte munmap fails with EINVAL --
+leaking a huge page of a global pool on every single attach. Replaced with
+pread(), which has no such rule and costs one fewer syscall besides.
+
+NEGATIVE RESULT, already conclusive: the THP fallback is a dead end on this
+machine, and reporting it as if it were huge pages would have been the easy
+mistake to make.
+
+    $ cat /sys/kernel/mm/transparent_hugepage/shmem_enabled
+    always within_size advise [never] deny force
+
+Transparent huge pages for SHARED memory are gated on their own knob, and it
+ships as `never` on stock Ubuntu. The madvise still returns 0. VM_HUGEPAGE
+still appears in the mapping's VmFlags (`hg`). The arena is still 4 KiB
+pages throughout. Probed directly -- created a ring under AUTO, faulted all
+64 MiB of arena, then read that VMA's /proc/self/smaps entry:
+
+    79fff7600000-79fffb600000 rw-s 00200000 00:01 652   /memfd:zcring
+    Rss:               65536 kB
+    ShmemPmdMapped:        0 kB
+    THPeligible:           0
+    VmFlags: rd wr sh mr mw me ms sd hg
+
+VA 2 MiB aligned, arena_off 2 MiB aligned, advice accepted, zero huge pages.
+The alignment machinery is provably correct and the kernel policy simply
+declines. Hence the backing is reported as `thp-advise` and never as `thp`:
+it is a request, not a receipt. Do not let a future session read that string
+in a CSV and conclude an arm had huge pages.
+
+NOT DONE: the 1 MiB N=1 A/B itself. It needs real 2 MiB pages, so it needs
+hugetlbfs, whose pool is 0 by default and is set by a root sysctl this
+machine's sudoers does not grant (only /usr/bin/cpupower is NOPASSWD). The
+script is written, committed and ready -- scripts/hugepage_ab.sh, 4k vs huge
+x zcring vs unix, 1 MiB, N=1, gap=100us, REPS=5, wait_for_cool() before
+every invocation, C-states disabled, unix as the drift control. It records
+the `pages=` line bench prints per row rather than the flag it passed, and
+aborts if the huge arm did not get hugetlb. To run it:
+
+    sudo sysctl -w vm.nr_hugepages=40    # 40 x 2 MiB = 80 MiB
+    ./scripts/hugepage_ab.sh
+    sudo sysctl -w vm.nr_hugepages=0     # give the memory back
+
+The pool is deliberately not reserved by the script: it takes memory from
+the rest of an 8 GB machine for as long as it is set.
+
+The time-box stands as given. If huge pages do not move the 1 MiB number by
+more than a few percent, record the negative result and stop -- the
+remaining candidates (uncore/memory-controller frequency, turbo/RAPL budget
+on a never-fully-idle package) are platform power properties, not properties
+of this code, and are not worth more time before the deadline.
+
+Two things guard the existing datasets while this is open. scripts/sweep.sh
+and scripts/fanout.sh now pass --pages=4k explicitly, so neither dataset can
+silently change meaning depending on whether vm.nr_hugepages happens to be
+reserved on the machine at the time. And bench prints the backing it got to
+stderr on every zcring run, so a contaminated run is visible in the terminal
+rather than only in a ratio that looks slightly off.
+
+Verification: make test and make tsan both clean. Two new test groups --
+fallback/layout/small-ring under all three policies, and strict mode plus a
+cross-process attach over a huge-aligned mapping (the child re-derives every
+pointer from the control block, so a wrong offset in either mapper shows up
+as corrupt payloads rather than as nothing). Neither asserts that huge pages
+were obtained: that depends on vm.nr_hugepages and shmem_enabled, and a test
+that fails on a stock machine gets retrained into being ignored.

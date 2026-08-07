@@ -8,6 +8,7 @@
 #define _GNU_SOURCE
 #include "../src/zcring.h"
 
+#include <errno.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -720,6 +721,173 @@ static void test_notify_lost_wakeup_window(void)
     zc_close(&r);
 }
 
+/* ---- §11: huge-page backing must be an optimisation, never a requirement ----
+ *
+ * The property under test is the fallback, not the fast path. Huge pages are
+ * unavailable on most systems this will ever run on — hugetlbfs pools are
+ * empty by default and embedded kernels often lack them entirely — so the
+ * thing that must never break is creating a working ring anyway. These tests
+ * therefore assert on the ring, and only report which backing it got.
+ *
+ * Deliberately not asserted: that ZC_HUGE_AUTO produces huge pages. That
+ * depends on vm.nr_hugepages and on shmem_enabled, neither of which a unit
+ * test may assume, and a test that fails on a stock machine would be
+ * retrained into being ignored. */
+
+static size_t align_up(size_t v, size_t a) { return (v + a - 1) & ~(a - 1); }
+
+/* A slot count whose arena clears the ZC_HUGE_MIN_PAGES threshold, so AUTO
+ * actually attempts a huge backing rather than declining on size. */
+static uint32_t huge_slots(size_t *arena_out)
+{
+    size_t hp = zc_hugepage_size();
+    if (!hp) hp = 2u << 20;
+    uint32_t slots = 64;
+    while ((size_t)slots * SLOT_SIZE < (size_t)ZC_HUGE_MIN_PAGES * hp)
+        slots <<= 1;
+    if (arena_out) *arena_out = (size_t)slots * SLOT_SIZE;
+    return slots;
+}
+
+static void roundtrip(zc_ring_t *r, const char *what)
+{
+    uint64_t pos, id = 0; uint32_t len = 0;
+    void *p = zc_reserve(r, &pos);
+    CHECK(p != NULL, "%s: reserve failed", what);
+    if (!p) return;
+    fill(p, 7);
+    zc_commit(r, pos, SLOT_SIZE);
+    p = zc_acquire(r, &pos, &len);
+    CHECK(p != NULL, "%s: acquire failed", what);
+    if (!p) return;
+    CHECK(verify(p, &id) == 0 && id == 7, "%s: payload corrupted", what);
+    CHECK(len == SLOT_SIZE, "%s: len %u", what, len);
+    zc_release(r, pos);
+}
+
+static void test_huge_fallback(void)
+{
+    printf("huge pages: auto degrades to a working ring whatever the system has\n");
+    size_t arena = 0;
+    uint32_t slots = huge_slots(&arena);
+    zc_ring_t r;
+
+    zc_set_hugepage_policy(ZC_HUGE_AUTO);
+    CHECK(zc_create(&r, slots, SLOT_SIZE) == 0,
+          "auto-policy create failed: %s", strerror(errno));
+    if (failures) return;
+    int b = zc_backing(&r);
+    printf("    arena %zu MiB -> pages=%s\n", arena >> 20, zc_backing_name(b));
+    /* Whatever it chose, the arena has to start on a boundary the choice can
+     * actually use. A huge backing over a 4 KiB-aligned arena would be a
+     * silent no-op — the bug this assert exists to catch. */
+    if (b != ZC_BACKING_4K)
+        CHECK((r.ctrl->arena_off & (zc_hugepage_size() - 1)) == 0,
+              "arena_off %llu is not huge-page aligned under pages=%s",
+              (unsigned long long)r.ctrl->arena_off, zc_backing_name(b));
+    roundtrip(&r, "auto");
+    zc_close(&r);
+
+    /* OFF must reproduce the pre-§11 layout exactly: results/ was measured
+     * against it and has to stay regenerable. */
+    zc_set_hugepage_policy(ZC_HUGE_OFF);
+    CHECK(zc_create(&r, slots, SLOT_SIZE) == 0, "off-policy create failed");
+    if (failures) return;
+    CHECK(zc_backing(&r) == ZC_BACKING_4K, "pages=4k requested, got %s",
+          zc_backing_name(zc_backing(&r)));
+    size_t pg = (size_t)sysconf(_SC_PAGESIZE);
+    size_t slots_off = align_up(sizeof(zc_ctrl_t), ZC_CACHELINE);
+    size_t legacy_off = align_up(slots_off + (size_t)slots * sizeof(zc_slot_t), pg);
+    CHECK(r.ctrl->arena_off == legacy_off,
+          "pages=4k moved the arena: arena_off=%llu, expected %zu",
+          (unsigned long long)r.ctrl->arena_off, legacy_off);
+    roundtrip(&r, "4k");
+    zc_close(&r);
+
+    /* A small ring must not take a huge page it cannot fill — the pool is a
+     * scarce global resource (§11). */
+    zc_set_hugepage_policy(ZC_HUGE_AUTO);
+    CHECK(zc_create(&r, 8, SLOT_SIZE) == 0, "small-ring create failed");
+    if (failures) return;
+    CHECK(zc_backing(&r) == ZC_BACKING_4K,
+          "a %u-byte arena took huge pages (%s)", 8u * SLOT_SIZE,
+          zc_backing_name(zc_backing(&r)));
+    zc_close(&r);
+    zc_set_hugepage_policy(ZC_HUGE_AUTO);
+}
+
+static void test_huge_strict_and_attach(void)
+{
+    printf("huge pages: strict mode is honest, and peers agree on the backing\n");
+    uint32_t slots = huge_slots(NULL);
+    zc_ring_t r;
+
+    /* REQUIRE either delivers hugetlb or fails. What it must never do is
+     * succeed with 4 KiB pages, which would make an A/B measure its control
+     * arm twice and report the result as a win. */
+    zc_set_hugepage_policy(ZC_HUGE_REQUIRE);
+    int strict_ok = (zc_create(&r, slots, SLOT_SIZE) == 0);
+    if (!strict_ok) {
+        printf("    pages=huge unavailable (%s) — skipping the strict arm\n",
+               strerror(errno));
+    } else {
+        CHECK(zc_backing(&r) == ZC_BACKING_HUGETLB,
+              "pages=huge succeeded but reports %s",
+              zc_backing_name(zc_backing(&r)));
+        roundtrip(&r, "huge");
+        zc_close(&r);
+    }
+
+    /* A failed strict attempt must leave nothing behind. If it leaked the
+     * hugetlbfs fd, a long sweep would exhaust the pool and later arms would
+     * fall back without saying so. */
+    zc_set_hugepage_policy(ZC_HUGE_AUTO);
+    CHECK(zc_create(&r, slots, SLOT_SIZE) == 0,
+          "create after a strict attempt failed: %s", strerror(errno));
+    if (failures) return;
+
+    /* The aligned-mapping path has its own way to be wrong: the creator maps
+     * at a huge-aligned address through MAP_FIXED over a reservation, and a
+     * peer repeats that independently. If either got it wrong, the child
+     * reads the arena at the wrong offset — so check across a fork, where the
+     * child re-derives everything from the control block rather than
+     * inheriting the parent's pointers. */
+    _Atomic uint32_t *bad = mmap(NULL, sizeof(*bad), PROT_READ | PROT_WRITE,
+                                 MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    atomic_store(bad, 0);
+    int fd = zc_fd(&r);
+    pid_t pid = fork();
+    if (pid == 0) {
+        zc_ring_t peer;
+        if (zc_attach(&peer, fd) != 0) _exit(2);
+        if (zc_backing(&peer) != zc_backing(&r)) atomic_fetch_add(bad, 1);
+        for (uint32_t i = 0; i < 1000; i++) {
+            uint64_t pos, id; uint32_t len; void *p;
+            while (!(p = zc_acquire(&peer, &pos, &len))) sched_yield();
+            if (verify(p, &id) != 0 || id != i) atomic_fetch_add(bad, 1);
+            zc_release(&peer, pos);
+        }
+        /* Not zc_close: it would close the inherited fd, which is the
+         * parent's. Unmapping is the part under test anyway. */
+        _exit(0);
+    }
+    for (uint32_t i = 0; i < 1000; i++) {
+        uint64_t pos; void *p;
+        while (!(p = zc_reserve(&r, &pos))) sched_yield();
+        fill(p, i);
+        zc_commit(&r, pos, SLOT_SIZE);
+    }
+    int st = 0;
+    waitpid(pid, &st, 0);
+    CHECK(WIFEXITED(st) && WEXITSTATUS(st) == 0,
+          "peer exited %d (2 = zc_attach failed on a huge-aligned ring)",
+          WIFEXITED(st) ? WEXITSTATUS(st) : -1);
+    CHECK(atomic_load(bad) == 0, "%u disagreements between creator and peer",
+          atomic_load(bad));
+    munmap(bad, sizeof(*bad));
+    zc_close(&r);
+}
+
 int main(void)
 {
     /* Line-buffer stdout. When it is a pipe the default is block buffering,
@@ -742,6 +910,8 @@ int main(void)
     test_notify_fast_arrivals_do_not_block();
     test_notify_deadline();
     test_notify_lost_wakeup_window();
+    test_huge_fallback();
+    test_huge_strict_and_attach();
 
     if (failures) { printf("\n%d check(s) FAILED\n", failures); return 1; }
     printf("\nall checks passed\n");

@@ -483,6 +483,55 @@
  *     consumer re-learns from the prior, taking on the order of 1/gamma waits
  *     (tens) to re-converge. Persisting it was rejected as more state to keep
  *     correct than it is worth for a threshold that re-learns in microseconds.
+ *
+ * ===========================================================================
+ * 11. Huge-page backing for the arena
+ * ===========================================================================
+ *
+ * The hypothesis this exists to test. At a 1 MiB payload with 4 KiB pages,
+ * one message spans 256 pages, so producing it walks 256 PTEs and consuming
+ * it walks 256 more — in a *different* address space, with its own TLB
+ * entries for the same physical pages. The L1 dTLB on the measurement part
+ * holds ~64 entries, so every message misses it comprehensively, twice. That
+ * is a candidate explanation for part of the unexplained large-payload cost
+ * recorded in reports.txt §22/§27. A 2 MiB page turns the same 1 MiB message
+ * into a single PTE per side.
+ *
+ * Three ways to get one, tried in that order:
+ *
+ *   (a) MFD_HUGETLB on the memfd. The strongest form: the file is hugetlbfs,
+ *       so *every* mapping of it is huge-page backed and no mapper has to
+ *       cooperate. It is also the least available — hugetlbfs serves from a
+ *       preallocated pool (vm.nr_hugepages), which is 0 on a stock system,
+ *       and the mmap simply fails with ENOMEM when the pool is empty.
+ *   (b) A normal memfd with the arena madvise(MADV_HUGEPAGE)'d. No pool
+ *       needed, but for shared memory it is gated on shmem_enabled, which is
+ *       `never` by default on Ubuntu — so this path frequently succeeds as a
+ *       syscall and does nothing at all. It is reported as THP, never as
+ *       proof of huge pages; see zc_backing().
+ *   (c) 4 KiB pages, exactly as before.
+ *
+ * Fallback is unconditional and silent by design. Embedded kernels routinely
+ * ship without hugetlbfs, and an IPC framework that refuses to start there
+ * has traded its entire target platform for a TLB optimisation. The only way
+ * to make a missing huge page fatal is to ask for it explicitly with
+ * ZC_HUGE_REQUIRE, which exists for benchmarking arms, not for production.
+ *
+ * Two structural points:
+ *
+ *   - The arena's file offset is aligned to the huge-page boundary, not just
+ *     the page boundary, whenever a huge path is in play. Without that the
+ *     arena starts mid-huge-page and neither (a) nor (b) can map it with a
+ *     PMD. The control block and slot array live in the first huge page and
+ *     are deliberately NOT advised: they are a few cache lines that want to
+ *     stay exactly where they are, not 2 MiB of hot TLB entry.
+ *   - Huge pages are attempted only when the arena is large enough for the
+ *     TLB argument to hold (ZC_HUGE_MIN_PAGES huge pages' worth). A 64 KiB
+ *     arena rounded up to a 2 MiB page would consume 32x its size from a
+ *     scarce global pool to save TLB misses it was never taking.
+ *
+ * The layout under ZC_HUGE_OFF is byte-for-byte what it was before this
+ * section existed, so results/ stays regenerable.
  */
 #ifndef ZCRING_H
 #define ZCRING_H
@@ -518,6 +567,12 @@ extern "C" {
  * bounded scan is what keeps the producer's gate recomputation cheap. */
 #define ZC_MAX_CONSUMERS 16
 
+/* Smallest arena, in huge pages, for which ZC_HUGE_AUTO will attempt huge
+ * backing. Below this the rounding waste outweighs a TLB saving the arena was
+ * too small to be taking — see §11. Not a tuning knob so much as the point
+ * where the argument for huge pages stops holding. */
+#define ZC_HUGE_MIN_PAGES 4u
+
 enum { ZC_CONS_FREE = 0, ZC_CONS_CLAIMED = 1, ZC_CONS_ACTIVE = 2 };
 enum { ZC_MODE_UNICAST = 0, ZC_MODE_BROADCAST = 1 };
 
@@ -528,6 +583,21 @@ enum { ZC_MODE_UNICAST = 0, ZC_MODE_BROADCAST = 1 };
  * for this to fail. */
 #define ZC_MODE_MASK      0x000000FFu
 #define ZC_MODE_F_NOTIFY  0x00000100u
+
+/* Huge-page backing of the arena — see §11. Both ride in the same spare high
+ * bits, so the shared layout is again untouched and ZC_ABI_VERSION stays 2.
+ *
+ * F_HUGETLB: the memfd itself is hugetlbfs-backed (MFD_HUGETLB). Every
+ *            mapping of it is huge-page backed, whatever the mapper does.
+ * F_HUGEALIGN: the arena's *file offset* is huge-page aligned and the creator
+ *            asked for THP over it. This one is advice to whoever attaches:
+ *            align the mapping's virtual address the same way and repeat the
+ *            madvise, or that process keeps 4 KiB PTEs even though the pages
+ *            underneath are huge. Alignment is a per-process property of the
+ *            mapping, never shared state, so a peer that ignores this bit is
+ *            slower and still correct. */
+#define ZC_MODE_F_HUGETLB   0x00000200u
+#define ZC_MODE_F_HUGEALIGN 0x00000400u
 
 /* Per-slot descriptor. seq is the Vyukov sequence counter that carries both
  * ownership and the acquire/release edge for the payload bytes. */
@@ -685,6 +755,32 @@ int  zc_create_bcast_notify(zc_ring_t *r, uint32_t slot_count, uint32_t slot_siz
 int  zc_attach(zc_ring_t *r, int fd);
 void zc_close(zc_ring_t *r);
 int  zc_fd(const zc_ring_t *r);
+
+/* ---- huge-page backing for the arena (§11) ----
+ *
+ * Process-wide policy, read at zc_create*() time. AUTO is the default and
+ * degrades silently: hugetlbfs if the pool can serve it, else THP, else 4 KiB
+ * pages. OFF reproduces the pre-huge-page layout byte for byte, which is what
+ * keeps every CSV already committed to results/ regenerable. REQUIRE fails
+ * creation rather than falling back, and exists so an A/B cannot be
+ * contaminated by an arm that quietly did not get what it asked for. */
+enum { ZC_HUGE_AUTO = 0, ZC_HUGE_OFF = 1, ZC_HUGE_REQUIRE = 2 };
+void zc_set_hugepage_policy(int policy);
+
+/* What a ring actually got. Derived from the shared mode word, so an
+ * attaching consumer reports the same thing the creator does.
+ *
+ * ZC_BACKING_THP means MADV_HUGEPAGE was accepted for the arena — a request,
+ * not a receipt. Whether the kernel actually installs PMD mappings depends on
+ * /sys/kernel/mm/transparent_hugepage/shmem_enabled, which is `never` on
+ * stock Ubuntu and makes the advice a no-op. Do not report THP as evidence
+ * that huge pages were used; only ZC_BACKING_HUGETLB is a guarantee. */
+enum { ZC_BACKING_4K = 0, ZC_BACKING_THP = 1, ZC_BACKING_HUGETLB = 2 };
+int         zc_backing(const zc_ring_t *r);
+const char *zc_backing_name(int backing);
+
+/* The system's default huge-page size in bytes, or 0 if there is none. */
+size_t      zc_hugepage_size(void);
 int  zc_send_fd(int sock, int fd);
 int  zc_recv_fd(int sock);
 

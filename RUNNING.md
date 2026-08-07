@@ -248,6 +248,64 @@ than large bulk transfers where possible.
 | fan-out consumer count doesn't change zcring latency much | expected — publication is O(1) in N. That is the result, not a bug |
 | p99.9 wildly different between otherwise-identical reps (some fine, one in the hundreds of µs / ms) | deep C-state entry — see §4a, run `sudo cpupower idle-set -D 0` |
 | large-payload zcring p50 degrades progressively over the course of a sweep, worse than pipe/unix's degradation | package thermal throttling — see §4b, check `thermal_zone*/temp`, let `wait_for_cool()` do its job |
+| a huge-page arm that reports `pages=thp-advise` | it did **not** get huge pages; `shmem_enabled` is `never`. See §5a |
+
+## 5a. Huge pages for the arena
+
+zcring asks for huge-page backing of the arena whenever the arena is large
+enough to benefit (≥ 4 huge pages, so this only ever engages at large
+payloads) and falls back silently when it cannot have them. Nothing needs to
+be configured for the ring to work; this section is about how to *measure*
+the difference.
+
+Which path a run actually took is printed to stderr by `bench`:
+
+```
+$ build/bench --transport=zcring --size=1048576 --touch --gap-us=100
+  pages=thp-advise
+```
+
+| `pages=` | Meaning |
+|---|---|
+| `hugetlb` | the memfd is hugetlbfs-backed. Real 2 MiB pages, guaranteed. |
+| `thp-advise` | ordinary memfd, arena aligned and `MADV_HUGEPAGE` accepted. **A request, not a receipt** — see below. |
+| `4k` | ordinary pages. Also what a small ring reports, deliberately. |
+
+**`thp-advise` usually means nothing happened.** Transparent huge pages for
+*shared* memory are gated on a separate knob that ships as `never`:
+
+```
+$ cat /sys/kernel/mm/transparent_hugepage/shmem_enabled
+always within_size advise [never] deny force
+```
+
+With `never`, the madvise succeeds, the kernel sets `VM_HUGEPAGE` on the
+mapping, and the arena is still 4 KiB pages throughout. Verified directly on
+the measurement box: the arena's `/proc/self/smaps` entry reports
+`THPeligible: 0` and `ShmemPmdMapped: 0` even with the VA and the arena
+offset both correctly 2 MiB aligned. Do not read `thp-advise` as evidence of
+huge pages in any result.
+
+So an honest A/B needs hugetlbfs, which serves from a preallocated pool that
+is empty by default:
+
+```bash
+sudo sysctl -w vm.nr_hugepages=40    # 40 x 2 MiB = 80 MiB, enough for a
+                                     # 64 MiB arena plus the control page
+./scripts/hugepage_ab.sh             # 4k vs huge at 1 MiB, N=1, 5 reps
+sudo sysctl -w vm.nr_hugepages=0     # give the memory back
+```
+
+The pool is *not* reserved by the script. It takes memory away from the rest
+of the system for as long as it is set, on a machine with 8 GB, and a
+benchmark should not do that behind your back.
+
+`--pages=huge` fails rather than falling back, which is the point: an arm
+that quietly measured 4 KiB pages twice would report a null result as a
+confirmed one. `--pages=4k` forces the original layout and is what the
+committed baselines were measured with. `scripts/hugepage_ab.sh` records the
+`pages=` line per row rather than the flag it passed, and aborts if the huge
+arm did not get hugetlb.
 
 ## 6. What to report back
 

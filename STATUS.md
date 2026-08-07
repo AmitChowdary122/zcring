@@ -372,6 +372,50 @@ of this code — uncore/memory-controller frequency, or a turbo/RAPL budget an
 never-fully-idle package cannot reach. Not worth more time before the
 deadline; it is disclosed either way.
 
+## Huge-page backing — built 8 Aug, A/B still owed
+
+The last untested non-platform candidate for the large-payload cost is
+address translation: at 1 MiB with 4 KiB pages each message walks 256 PTEs
+per side, in two address spaces, against an L1 dTLB of ~64 entries. A 2 MiB
+page makes it one PTE per side. `src/zcring.h` §11 has the full derivation.
+
+**Built and merged.** `ZC_HUGE_AUTO` (default) tries `MFD_HUGETLB`, falls
+back to a plain memfd with the arena `MADV_HUGEPAGE`'d, then to 4 KiB.
+`ZC_HUGE_OFF` reproduces the old layout byte for byte. `ZC_HUGE_REQUIRE`
+fails instead of falling back — that exists so a benchmark arm cannot
+silently measure the control twice. **ABI stays v2**: both flags ride in
+spare bits of `ctrl->mode`, `zc_ctrl_t` is unchanged, the layout asserts pass
+untouched. `make test` and `make tsan` clean.
+
+**Do not read `pages=thp-advise` as huge pages.** Shared-memory THP is gated
+on `/sys/kernel/mm/transparent_hugepage/shmem_enabled`, which is `never` on
+this box. The madvise returns 0, `VM_HUGEPAGE` is set, and the arena is 4 KiB
+pages regardless — probed directly, the arena VMA reports `THPeligible: 0`
+and `ShmemPmdMapped: 0` with both the VA and `arena_off` correctly 2 MiB
+aligned. The alignment machinery is right; the kernel policy declines. That
+is why the string is `thp-advise` and not `thp` — a request, not a receipt.
+Only `pages=hugetlb` is a guarantee.
+
+**Outstanding: the 1 MiB N=1 A/B.** It needs real 2 MiB pages, so it needs
+hugetlbfs, whose pool is 0 by default and is set by a root sysctl this
+machine's sudoers does not grant (only `/usr/bin/cpupower` is NOPASSWD). The
+script is committed and ready:
+
+```bash
+sudo sysctl -w vm.nr_hugepages=40    # 40 x 2 MiB = 80 MiB
+./scripts/hugepage_ab.sh             # 4k vs huge, unix as drift control
+sudo sysctl -w vm.nr_hugepages=0     # give the memory back
+```
+
+**Time-boxed by instruction.** If huge pages do not move the 1 MiB number by
+more than a few percent, record the negative result and stop. The remaining
+candidates are platform power/frequency properties, not properties of this
+code, and are not worth more time before the deadline.
+
+`scripts/sweep.sh` and `scripts/fanout.sh` now pass `--pages=4k` explicitly,
+so those datasets cannot change meaning depending on whether the pool happens
+to be reserved when they run. Full writeup: `reports.txt` §29.
+
 ## Traps already hit once — do not repeat
 
 - **`--touch` is mandatory.** Without it the harness moves 8 bytes and
@@ -423,14 +467,18 @@ deadline; it is disclosed either way.
    it doubles as the first test of whether notification removes the 64 B /
    N=4 spinner artifact. *Sonnet* — it is a script run, not a design task.
    Needs a quiet machine and a few hours of thermal-gated wall clock.
-5. **Draft the abstract.** Target submission 8–10 Aug; window closes 25 Aug.
+5. **Run the huge-page A/B.** Three commands, ~20 min of thermal-gated wall
+   clock, and it needs a root `sysctl` — see "Huge-page backing" above. The
+   code is built and tested; only the measurement is missing. Time-boxed:
+   a result under a few percent is a negative result, record it and stop.
+6. **Draft the abstract.** Target submission 8–10 Aug; window closes 25 Aug.
    *Opus.* Nothing is blocking this — but the abstract now has a real
    answer for the AI/Technical Approach criterion and Model Type, which it
    did not have before. See "Adaptive notification" above for the framing
    and "The story the abstract should tell" below for the numbers.
-6. Optional but recommended: live-USB scaling run on the Ryzen for N=8.
+7. Optional but recommended: live-USB scaling run on the Ryzen for N=8.
    *Sonnet.* Do this only if the abstract will claim scaling beyond N=2.
-7. `eventfd`/`epoll` bridge (the remaining piece of Layer 2 notification);
+8. `eventfd`/`epoll` bridge (the remaining piece of Layer 2 notification);
    producer crash recovery; determinism rigor (isolcpus / nohz_full /
    PREEMPT_RT); iceoryx and ZeroMQ comparators; presentation.
 

@@ -95,8 +95,12 @@ for size in $SIZES; do
     for t in zcring pipe unix; do
       wait_for_cool
       printf 'running %-7s size=%-8s n=%-7s gap=%-6s rep=%s\n' "$t" "$size" "$n" "$gap" "$rep" >&2
+      # --pages=4k pins the arena's page size, so this dataset does not
+      # silently change meaning depending on whether vm.nr_hugepages happens
+      # to be reserved on the machine at the time (see RUNNING.md §5a).
+      # Huge pages are measured in scripts/hugepage_ab.sh, not here.
       $BENCH --transport="$t" --size="$size" --count="$n" \
-             --gap-us="$gap" --touch $WAIT_FLAG $PIN --csv >> "$OUT"
+             --gap-us="$gap" --touch --pages=4k $WAIT_FLAG $PIN --csv >> "$OUT"
     done
   done
 done
