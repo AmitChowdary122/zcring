@@ -507,6 +507,24 @@ at 256 KiB–1 MiB (0.68×–0.84×), a real, disclosed cost of the C-state
 configuration the small-message determinism claim requires (see README.md
 "Why large payloads lose here", STATUS.md Open problem #5).
 
+> **UPDATED 7 Aug — read this before quoting any fan-out number.** The
+> `--yield` sweep below (0.82 / 1.38 / 2.03×) was regenerated under
+> `--notify` and gives **0.82 / 1.36 / 1.24×**. N=1 and N=2 reproduce; **N=4
+> does not**, because `FUTEX_WAKE` makes four consumers runnable at once on a
+> two-physical-core machine and they thunder — 64 B N=4 goes 1.03 µs →
+> 12.3 µs. That is oversubscription, not a transport property, and it cannot
+> be quoted from this hardware in either direction. Small payloads also lose
+> their advantage entirely under `--notify` (18.3× → 0.93× at 64 B), which is
+> the syscall coming back exactly as `zcring.h` §5 derives.
+>
+> **Defensible claim until the sweep is repeated on ≥4 physical cores:**
+> zcring loses at N=1 on large payloads and wins from N=2 onward, because
+> publication is O(1) in N and copying transports are O(N). Do *not* claim
+> "grows with N" past N=2 without the bigger machine. Datasets:
+> `results/fanout_yield_historical.csv` (historical, not reproducible) and
+> `results/fanout_notify.csv` (current, regenerates from this tree). Full
+> analysis in README.md's "The same sweep under `--notify`".
+
 Then show the fan-out crossover, which is the more interesting scalability
 story precisely because it isn't a flat multiplier: at 1 MiB, the same 0.82×
 loss at N=1 becomes a 1.38× win at N=2 and a 2.03× win at N=4, because
