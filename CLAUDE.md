@@ -1,8 +1,10 @@
 # CLAUDE.md — project context
 
-Read this first. `PLAN.md` has the full strategy, `README.md` the benchmark
-methodology, `RUNNING.md` the operational detail. This file is the summary
-that keeps a fresh session from making expensive mistakes.
+**Read `HACKATHON.md` first — it holds the official rules, the real submission
+form, and the actual evaluation rubric, and it outranks every other file
+including this one.** Then this file, which is the summary that keeps a fresh
+session from making expensive mistakes. `PLAN.md` has the strategy, `README.md`
+the benchmark methodology, `RUNNING.md` the operational detail.
 
 ## What this is
 
@@ -20,7 +22,8 @@ decisions must respect a single person's debugging bandwidth.
 | Date | What |
 |---|---|
 | **25 Aug 2026** | Abstract + problem-statement selection closes. **Real code freeze.** |
-| **~8–10 Aug** | Target for submitting the abstract — early, backed by measured data |
+| **~23–24 Aug** | **Stage 1 closes.** Portal showed ~400 h remaining on 7 Aug. This is a **full submission**, not an abstract: architecture diagram, PPT, public GitHub link, description/novelty/innovation text, demo video. See HACKATHON.md for every field. |
+| **~18–20 Aug** | *Self-imposed* target to have everything uploaded, leaving buffer. |
 | **1st week Sep** | Online presentation of the working prototype to judges. This is where the winner is decided. |
 
 The trap in the official schedule: the prototype demo follows the abstract by
@@ -29,9 +32,22 @@ as the date everything must work by.
 
 ## Evaluation rubric — this drives priorities
 
-Judged on **innovation, feasibility, scalability, impact**. Performance and
-technical depth are *not* named criteria. A benchmark number only scores
-insofar as it evidences one of those four words.
+**Superseded — see `HACKATHON.md` for the real, much more detailed rubric.**
+The four-word summary below was an early approximation; the actual criteria
+add *AI/Technical Approach*, *Security*, *Documentation Quality*, *User
+Experience*, and score the **architecture diagram itself**. Two consequences
+worth carrying here:
+
+- **AI/ML is a CORE criterion and this project has none.** The submission form
+  requires a Model Type. The honest answer is the adaptive spin-then-futex
+  threshold learned online from inter-arrival distributions — already the next
+  work item. Do not bolt on an LLM. See HACKATHON.md.
+- **Security is scored**, which promotes Layer 3 kernel arbitration: it now
+  scores on both *Novelty* and *Security*.
+
+Earlier approximation, still directionally useful: judged on **innovation,
+feasibility, scalability, impact**; a benchmark number only scores insofar as
+it evidences one of them.
 
 Practical consequences:
 
