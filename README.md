@@ -84,7 +84,7 @@ background services stopped, mean of 5 reps. Raw data in `results/sweep.csv`.
 
 | payload | zcring | pipe | unix | vs. best comparator |
 |---|---|---|---|---|
-| 64 B | 114 ns | 2.2 µs | 3.2 µs | **19.6×** |
+| 64 B | 114 ns | 2.2 µs | 3.2 µs | **19.6×** (18–20× re-measured, below) |
 | 256 B | 130 ns | 2.2 µs | 3.3 µs | 17.1× |
 | 1 KiB | 233 ns | 2.3 µs | 3.5 µs | 10.0× |
 | 4 KiB | 749 ns | 2.7 µs | 4.2 µs | 3.66× |
@@ -94,6 +94,59 @@ background services stopped, mean of 5 reps. Raw data in `results/sweep.csv`.
 | 1 MiB | 183 µs | 347 µs | 153 µs | 0.84× |
 
 Run-to-run p50 spread is within single-digit percent of the mean everywhere.
+
+### Reproducibility: the whole dataset was re-measured on a separate occasion
+
+The tables above are not a single sitting. The complete sweep and fan-out
+suites were re-run from a clean boot on a different day, machine re-quieted
+from scratch by the same procedure, into `results/{sweep,fanout}_verify.csv`.
+The originals were left untouched so the comparison is real rather than
+retrospective.
+
+**The scalability claim — the one that matters most — reproduces essentially
+exactly:**
+
+| configuration | original | re-run |
+|---|---|---|
+| 256 KiB, N=1 / N=2 / N=4 | 0.67× / 1.15× / 1.61× | 0.67× / 1.16× / 1.62× |
+| 1 MiB, N=1 / N=2 / N=4 | 0.82× / 1.38× / 2.03× | 0.82× / 1.38× / 2.06× |
+
+Single-consumer sweep ratios, same comparison:
+
+| payload | original | re-run |
+|---|---|---|
+| 64 B | 19.62× | 18.23× |
+| 256 B | 17.13× | 15.76× |
+| 1 KiB | 9.99× | 9.49× |
+| 4 KiB | 3.66× | **4.14×** |
+| 16 KiB | 1.55× | 1.50× |
+| 64 KiB | 1.01× | 0.98× |
+| 256 KiB | 0.68× | 0.68× |
+| 1 MiB | 0.84× | 0.83× |
+
+Two things worth stating plainly rather than smoothing over.
+
+**Small-message ratios came out ~7% lower on the re-run.** zcring itself
+reproduced within 2% at every size; the *comparators* got 5–12% faster at
+small payloads, most likely a quieter machine and a cooler start. So the
+headline is quoted as a **range across two independent sessions (18–20× at
+64 B)** rather than a single point estimate. A number that survives being
+measured twice is worth more than a number measured once, even when the
+second measurement is slightly less flattering.
+
+**4 KiB moved the other way, and the raw reps explain why.** Original:
+`[689, 691, 769, 789, 808]` — a 1.17× spread, *ascending within the run*, the
+signature of a package heating up. Re-run: `[653, 661, 666, 674, 674]`, a 1.03×
+spread and flat. The original 4 KiB figure was mildly thermally degraded; the
+cleaner measurement is ~4.1×. **The 3.66× in the table above is therefore
+conservative and is deliberately left as-is** — revising a headline upward on
+the newer, thinner dataset would be exactly the kind of move this project
+declines to make.
+
+Caveat on scope: the fan-out re-run has 5 repetitions per point; the sweep
+re-run has 1 (`REPS` did not reach the script). The fan-out reproduction is
+therefore the stronger of the two, and it is also the one carrying the
+scalability claim.
 
 ### Offered rate: a stated, justified choice, not an incidental one
 

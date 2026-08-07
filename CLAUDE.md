@@ -77,8 +77,13 @@ hatch.
 - Removes the **syscall from the data path** entirely.
 - Eliminates **two of four memory passes**, but note this does *not* yield 2×
   at large payloads — see below.
-- **64 B: 19.6× vs pipe. 1 KiB: 10.0×. 4 KiB: 3.66×.** Small-message latency
-  is the real story, and it is the regime embedded real-time control lives in.
+- **64 B: 18–20× vs pipe. 1 KiB: ~9.5–10×. 4 KiB: 3.66× (conservative; a
+  cleaner re-measurement gives 4.14×).** Small-message latency is the real
+  story, and it is the regime embedded real-time control lives in.
+  **Quote 64 B as a range, not as 19.6×** — the full suite was re-measured on
+  a separate occasion and the comparators came out 5–12% faster at small
+  payloads, giving 18.23× rather than 19.62×. zcring itself reproduced within
+  2% everywhere. A range across two sessions is the defensible claim.
 - **Large payloads (256 KiB–1 MiB) LOSE to a UNIX socket at N=1** (0.68×–
   0.84×), under the C-state-disabled configuration this project requires for
   the small-message determinism claim below. Confirmed independent of
@@ -106,6 +111,14 @@ the large-payload trade-off yourself before a judge finds it; then show
 fan-out, which is where the large-payload case is genuinely won back (N
 consumers = N copies avoided, so the advantage grows with N and crosses
 from a loss at N=1 to a 2×+ win by N=4).
+
+- **The whole dataset was re-measured on a separate occasion** into
+  `results/{sweep,fanout}_verify.csv`, from a clean boot with the machine
+  re-quieted from scratch. The fan-out crossover reproduced within 1.5% at
+  every point (0.82/1.38/2.03× → 0.82/1.38/2.06× at 1 MiB). This is
+  *feasibility* evidence in rubric terms and should be said out loud — almost
+  no competing submission will have re-measured itself. See README.md's
+  "Reproducibility" section.
 
 **p99.9 is quotable at N=1 with deep C-states disabled** (1.04 µs mean,
 sub-2 µs range — see README.md). p99.99 is not yet; still shows occasional

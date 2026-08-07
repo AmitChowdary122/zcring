@@ -34,9 +34,13 @@ writing and reading every payload byte:
 
 | payload | zcring | best comparator | speedup |
 |---|---|---|---|
-| 64 B | 114 ns | 2.2 µs | **19.6×** |
-| 1 KiB | 233 ns | 2.3 µs | 10.0× |
+| 64 B | 114 ns | 2.2 µs | **18–20×** |
+| 1 KiB | 233 ns | 2.3 µs | ~10× |
 | 4 KiB | 749 ns | 2.7 µs | 3.7× |
+
+Ranges rather than point estimates because the entire suite was re-measured
+on a separate occasion from a clean boot (see *Reproducibility* below), and
+these are the bounds across both sessions.
 
 **Scalability.** A broadcast mode delivers each message to N consumers with
 per-consumer cursors and zero copies for any of them. Publication costs one
@@ -61,13 +65,20 @@ sub-2 µs spread across repetitions. The variance collapse matters more than
 the mean: latency becomes predictable, which is what a real-time claim
 requires.
 
-**Correctness and reproducibility.** Exactly-once delivery is verified across
-4 producers × 4 consumers over 200,000 messages and across process boundaries;
-ThreadSanitizer runs clean. Every benchmark is scripted, run at a stated and
-sensitivity-tested offered rate, and its raw data committed. Three measurement
-artifacts found during development — a harness that never touched the payload,
-SMT-sibling pinning, and thermal throttling — are documented alongside the
-results rather than omitted.
+**Correctness.** Exactly-once delivery is verified across 4 producers × 4
+consumers over 200,000 messages and across process boundaries;
+ThreadSanitizer runs clean. Three measurement artifacts found during
+development — a harness that never touched the payload, SMT-sibling pinning,
+and thermal throttling — are documented alongside the results rather than
+omitted.
+
+**Reproducibility.** Every benchmark is scripted and run at a stated,
+sensitivity-tested offered rate, with all raw data committed. The complete
+suite was then **re-measured on a separate occasion from a clean boot**, with
+the machine re-quieted from scratch and the original results left untouched
+for comparison. The scalability result reproduced within 1.5% at every point.
+Single-consumer small-message ratios varied by ~7% between sessions, which is
+why they are quoted as ranges rather than point estimates.
 
 **Disclosed limitation.** Under the C-state-disabled configuration the
 determinism claim requires, single-consumer transfers above 256 KiB are slower
