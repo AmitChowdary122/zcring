@@ -461,23 +461,32 @@ to be reserved when they run. Full writeup: `reports.txt` §29.
 3. ~~Adaptive spin-then-futex notification.~~ **Done**, 8 Aug — see
    "Adaptive notification" above. It also settled the busy-spin hypothesis
    (Open problem #5, follow-up 2): negative, conclusively.
-4. **Regenerate the fan-out sweep under `--notify`.** `results/fanout.csv`
-   is now historical (measured with the removed `--yield`) and the fan-out
-   crossover claim rests on it. Highest-value measurement outstanding, and
-   it doubles as the first test of whether notification removes the 64 B /
-   N=4 spinner artifact. *Sonnet* — it is a script run, not a design task.
-   Needs a quiet machine and a few hours of thermal-gated wall clock.
+4. ~~**Regenerate the fan-out sweep under `--notify`.**~~ **Done**, 8 Aug —
+   `results/fanout_notify.csv`, with the `--yield` data preserved as
+   `results/fanout_yield_historical.csv`. It narrowed the crossover claim to
+   N=2 and showed notification does *not* remove the N=4 artifact: it
+   replaces spinner thrash with a wake storm. See the fan-out note above.
 5. **Run the huge-page A/B.** Three commands, ~20 min of thermal-gated wall
    clock, and it needs a root `sysctl` — see "Huge-page backing" above. The
    code is built and tested; only the measurement is missing. Time-boxed:
    a result under a few percent is a negative result, record it and stop.
-6. **Draft the abstract.** Target submission 8–10 Aug; window closes 25 Aug.
-   *Opus.* Nothing is blocking this — but the abstract now has a real
-   answer for the AI/Technical Approach criterion and Model Type, which it
-   did not have before. See "Adaptive notification" above for the framing
-   and "The story the abstract should tell" below for the numbers.
-7. Optional but recommended: live-USB scaling run on the Ryzen for N=8.
-   *Sonnet.* Do this only if the abstract will claim scaling beyond N=2.
+6. **Write the Stage 1 submission form text.** Title, Objective,
+   Description, Novelty, Innovation, Tech Stack, Model Type (**Inbuilt
+   Model** — the online-learned notification threshold). Stage 1 closes
+   ~23–24 Aug; self-imposed target 18–20 Aug to leave buffer. *Opus.*
+   Nothing blocks it: `ABSTRACT.md` has the raw material and the deck has
+   settled the narrative. **The "8–10 Aug abstract deadline" that earlier
+   versions of this file carried was never an organiser date** — it was a
+   self-imposed buffer that got restated as fact. `HACKATHON.md` is the
+   only authority on dates.
+7. ~~Live-USB scaling run on the Ryzen for N=8.~~ **Dropped, deliberately.**
+   In broadcast mode every consumer runs on every message, so consumer count
+   is bounded by core count on *any* platform — one producer plus four
+   consumers oversubscribes a four-core embedded target exactly as it does
+   this laptop. A prettier N=8 number off a desktop CPU would be *less*
+   representative of an embedded problem statement, not more. The crossover
+   sits at N=2, which fits on every embedded part there is. Do not reinstate
+   this item.
 8. `eventfd`/`epoll` bridge (the remaining piece of Layer 2 notification);
    producer crash recovery; determinism rigor (isolcpus / nohz_full /
    PREEMPT_RT); iceoryx and ZeroMQ comparators; presentation.

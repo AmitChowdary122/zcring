@@ -11,3 +11,11 @@ perf.data*
 
 # scratch previews from docs/deck.py rendering — never committed
 .deckpreview/
+
+# Claude's working-memory vault. Deliberately NOT committed: it is a private
+# index over this repo's own memory (STATUS.md, reports.txt, README.md), not a
+# source of truth, and it holds candid notes about retracted claims and dead
+# hypotheses. Everything in it is reconstructible from the committed docs.
+# Cross-machine facts belong in STATUS.md, which IS committed — the Ubuntu box
+# cannot see this directory.
+vault/
