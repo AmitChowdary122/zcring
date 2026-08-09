@@ -372,7 +372,58 @@ of this code — uncore/memory-controller frequency, or a turbo/RAPL budget an
 never-fully-idle package cannot reach. Not worth more time before the
 deadline; it is disclosed either way.
 
-## Huge-page backing — built 8 Aug, A/B still owed
+## Huge-page A/B — RESULT, 9 Aug: negative on the mean, interesting on the tail
+
+**The TLB hypothesis is refuted.** `results/hugepage_ab.csv`, 1 MiB, N=1,
+5 reps, `pages=hugetlb` confirmed on every huge row (so no arm silently
+measured its control).
+
+| metric | 4 KiB | huge | delta |
+|---|---|---|---|
+| mean | 193.6 µs | 190.3 µs | +1.7% |
+| p50 | 191.0 µs | 188.1 µs | +1.5% |
+| p99 | 213.2 µs | 200.4 µs | +6.0% |
+| p99.9 | 531.8 µs | 401.5 µs | +24.5% |
+
+Ratio vs unix moves **0.939× → 0.955×**. Still a loss. **1.7% is inside the
+"few percent" time-box: the large-payload mean-latency question is now
+closed.** Four hypotheses have been tested against it — offered rate, thermal
+state, busy-spin power, TLB pressure — and all four came back negative. What
+remains is platform power/frequency behaviour, i.e. not a property of this
+code. **Do not reopen this before the deadline.**
+
+Keep the huge-page path regardless: it is free, never regresses, and the
+fallback chain is silent so it costs nothing on kernels without hugetlbfs.
+
+### The tail finding — promising, NOT yet quotable
+
+Per-rep maxima at 1 MiB:
+
+```
+zcring (huge)  677  729  745  749  755   µs   <- spread   78 µs
+unix           785  727 1566  270 1619   µs   <- spread 1349 µs
+```
+
+zcring p99.9 401 µs vs unix 842 µs — **2.1× better**. zcring's worst case is
+bounded; unix is bimodal, with two excursions past 1.5 ms in five reps.
+
+If this holds up it reframes the large-payload story from a flat loss into a
+**mean-versus-tail trade-off**, which is both a better story and an honest
+one — a transport that is 5% faster on average but occasionally takes 8× its
+median is the wrong trade for real-time control.
+
+**It does not hold up yet.** Five reps is a thin sample for p99.9; unix's
+bimodality could be a machine artifact; and the 4 KiB arm shows the same
+direction more weakly, so huge pages and the transport are not yet separated.
+Needed before quoting: 1 MiB, higher `--count`, REPS≥10, thermally gated,
+C-states disabled, full tail reported. ~20 min of quiet-machine time.
+
+**Do not put this in the deck, README or form text until that run exists.**
+Three claims in this project have already been retracted for being published
+ahead of their evidence, and this is exactly the kind that tempts — it rescues
+a known weakness.
+
+## Huge-page backing — implementation notes (built 8 Aug)
 
 The last untested non-platform candidate for the large-payload cost is
 address translation: at 1 MiB with 4 KiB pages each message walks 256 PTEs
@@ -396,10 +447,10 @@ aligned. The alignment machinery is right; the kernel policy declines. That
 is why the string is `thp-advise` and not `thp` — a request, not a receipt.
 Only `pages=hugetlb` is a guarantee.
 
-**Outstanding: the 1 MiB N=1 A/B.** It needs real 2 MiB pages, so it needs
-hugetlbfs, whose pool is 0 by default and is set by a root sysctl this
-machine's sudoers does not grant (only `/usr/bin/cpupower` is NOPASSWD). The
-script is committed and ready:
+**The 1 MiB N=1 A/B was run 9 Aug — see the result section above.** It needs
+real 2 MiB pages, so it needs hugetlbfs, whose pool is 0 by default and is set
+by a root sysctl this machine's sudoers does not grant (only
+`/usr/bin/cpupower` is NOPASSWD). To repeat it:
 
 ```bash
 sudo sysctl -w vm.nr_hugepages=40    # 40 x 2 MiB = 80 MiB
@@ -407,10 +458,11 @@ sudo sysctl -w vm.nr_hugepages=40    # 40 x 2 MiB = 80 MiB
 sudo sysctl -w vm.nr_hugepages=0     # give the memory back
 ```
 
-**Time-boxed by instruction.** If huge pages do not move the 1 MiB number by
-more than a few percent, record the negative result and stop. The remaining
-candidates are platform power/frequency properties, not properties of this
-code, and are not worth more time before the deadline.
+**The time-box was honoured.** +1.7% is inside "a few percent", so the result
+was recorded as negative and the investigation stopped rather than being
+argued with. Writing the stop condition down before the data arrived is what
+made that easy — contrast the busy-spin hypothesis, which was advocated twice
+after an inconclusive first test.
 
 `scripts/sweep.sh` and `scripts/fanout.sh` now pass `--pages=4k` explicitly,
 so those datasets cannot change meaning depending on whether the pool happens
