@@ -395,7 +395,47 @@ code. **Do not reopen this before the deadline.**
 Keep the huge-page path regardless: it is free, never regresses, and the
 fallback chain is silent so it costs nothing on kernels without hugetlbfs.
 
-### The tail finding — promising, NOT yet quotable
+### Tail characterisation, 10 reps — RESOLVED
+
+`results/tail_1mib.csv` (REPS=10, COUNT=5000) settled the tail question the
+5-rep A/B raised. **One of the two findings survived; the other reversed.**
+
+**SURVIVED — bounded worst case.** Per-rep maximum at 1 MiB:
+
+| arm | max range | reps over 1 ms |
+|---|---|---|
+| zcring, 4 KiB | 684–936 µs | **0 / 10** |
+| zcring, huge | 674–932 µs | **0 / 10** |
+| unix socket | 756–2440 µs | **7 / 10** |
+
+Twenty zcring runs, none over 1 ms. Ten unix runs, seven over 1 ms, worst
+2.44 ms. Plausible mechanism, **unverified**: a 1 MiB socket transfer is many
+syscalls and each is a preemption point, where zcring's data path has none.
+If that holds it makes the bounded tail a consequence of the zero-syscall
+design rather than a separate property.
+
+**REVERSED — the p99.9 comparison.** The 5-rep run suggested zcring was 2.1×
+better on p99.9. At 10 reps:
+
+| | zcring (huge) | unix |
+|---|---|---|
+| p99.9, mean of reps | 437.8 µs | **327.3 µs** |
+| p99.9, median of reps | **253.3 µs** | 315.1 µs |
+
+zcring is bimodal — 3 reps in 10 near 880 µs, the rest near 250 µs — while
+unix clusters tightly at 281–375 µs. Median favours zcring, mean favours unix,
+and at n=10 neither is a claim.
+
+**Do not quote a p99.9 comparison at 1 MiB. Quote the bounded max.**
+
+The 2.1× figure was sampling noise: five reps happened to catch two elevated
+unix reps. It was marked not-quotable and kept out of the deck, which is why
+this cost nothing — but the reported *direction* was wrong, not just
+imprecise. **A tail statistic needs its per-rep spread inspected before its
+mean**; the bimodality was plainly visible in the raw per-rep list and
+completely invisible in the summary.
+
+### Original 5-rep tail note (superseded by the above)
 
 Per-rep maxima at 1 MiB:
 
