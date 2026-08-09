@@ -223,13 +223,29 @@ listing.
 
 ## 8. Practical notes for the build machine
 
-- **Develop in a VM, not on the measurement box.** A module bug is a kernel
-  panic, and that machine holds the only quotable dataset. Once Phase 1 is
-  stable, move over to confirm the fast path is unchanged.
+- **Everything Layer 3 happens in a VM. The module is never loaded on the
+  measurement box.** Decided 9 Aug, after checking prerequisites: that machine
+  has **Secure Boot enabled** (kernel `7.0.0-28-generic`, headers present), so
+  an unsigned module would need Secure Boot disabled or a MOK enrolled — and
+  it holds the only quotable dataset, where a module bug is a panic rather
+  than a failed test.
+
+  This costs nothing, because **no part of Layer 3 needs bare metal**:
+
+  - The security demo is *functional*, not a latency measurement. Hypervisor
+    jitter has no bearing on whether a write traps.
+  - "The fast path is unchanged" needs no module on bare metal either. With no
+    module loaded, the code path **is** today's code path, already measured.
+    For corroboration run a module-loaded vs not A/B *inside the VM*: absolute
+    numbers there are not quotable, but both arms carry identical jitter, so
+    the difference between them is a valid controlled comparison.
+  - Secure Boot is off by default under QEMU/KVM unless OVMF secure boot is
+    deliberately enabled.
+
+  If a bare-metal fast-path check is ever wanted, it is a plain sweep with no
+  module loaded — which is exactly what `results/sweep.csv` already is.
 - `sudo apt install linux-headers-$(uname -r) build-essential` — out-of-tree
   module build, separate `Makefile` under `kernel/`.
-- Unsigned modules need Secure Boot off or a MOK enrolled. **Check this
-  first** — it is a boring half-hour that is much worse discovered on day 3.
 - `dmesg -w` in a spare terminal, always.
 - The module is GPL-licensed by necessity (`MODULE_LICENSE("GPL")`); note the
   licensing boundary against the userspace library in the repo.
