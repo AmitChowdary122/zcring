@@ -6,6 +6,36 @@ including this one.** Then this file, which is the summary that keeps a fresh
 session from making expensive mistakes. `PLAN.md` has the strategy, `README.md`
 the benchmark methodology, `RUNNING.md` the operational detail.
 
+## How this project is worked — read before doing anything
+
+Two tools, two jobs. **Cowork plans; Claude Code executes.** The user runs a
+Cowork session to decide *what* to do and to draft the instruction, then hands
+that instruction to Claude Code, which does the building and measuring. Cowork
+does not write kernel code or run benchmarks; Claude Code does not decide
+scope or wording.
+
+If you are **Cowork**, at the start of every session:
+
+1. `HACKATHON.md` — only if the task touches rules, dates or the form.
+2. **`vault/INDEX.md`** — the working-memory index, ~90 lines. It is the
+   cheapest way to find out what has already been decided, measured,
+   retracted, or got wrong once. Open only the notes your task names; do not
+   bulk-read it.
+3. `STATUS.md` — current build and measurement state. Authoritative over the
+   vault whenever they disagree.
+
+Then produce an instruction precise enough to hand over, and **say which model
+to use** (Sonnet 5 by default; Opus 5 for `src/zcring.h`, kernel code, and
+strategy or writing work).
+
+If you are **Claude Code**: read `STATUS.md`, then whatever design doc the
+instruction names. The `vault/` directory is Cowork's notebook — you may read
+it, but `STATUS.md` is the contract between machines and the place your
+findings must be written back to.
+
+**`vault/` is committed but must be untracked before the repo is made public
+at submission** — `git rm -r --cached vault/`. See `.gitignore`.
+
 ## What this is
 
 A submission to the **SSM / CDAC Next-Gen Kernel Hackathon**, Track 1 (Core),

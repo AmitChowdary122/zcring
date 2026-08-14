@@ -35,6 +35,7 @@ disagree, the repo wins and I fix the vault.
 
 ## Decisions — settled, don't relitigate
 
+- [[decisions/cowork-plans-claude-code-executes]] — **how this project is worked.** My output is often an instruction, not an artifact.
 - [[decisions/problem-statement]] — Track 1 / zcring. **Locked by the rules.**
 - [[decisions/cut-from-the-top]] — scope discipline.
 - [[decisions/no-ryzen-n8-run]] — dropped deliberately, with reasoning.
