@@ -12,10 +12,15 @@ perf.data*
 # scratch previews from docs/deck.py rendering — never committed
 .deckpreview/
 
-# Claude's working-memory vault. Deliberately NOT committed: it is a private
-# index over this repo's own memory (STATUS.md, reports.txt, README.md), not a
-# source of truth, and it holds candid notes about retracted claims and dead
-# hypotheses. Everything in it is reconstructible from the committed docs.
-# Cross-machine facts belong in STATUS.md, which IS committed — the Ubuntu box
-# cannot see this directory.
-vault/
+# Claude's working-memory vault: an index over this repo's own memory
+# (STATUS.md, reports.txt, README.md), not a source of truth.
+#
+# It IS committed, deliberately — as of 14 Aug the Ubuntu SSD dual-boots in
+# the same laptop and sessions move between the two, so a Windows-only vault
+# would arrive empty on the machine doing the work.
+#
+# BEFORE MAKING THIS REPO PUBLIC AT SUBMISSION, untrack it:
+#     git rm -r --cached vault/
+#     # then re-add the line `vault/` below this comment block
+# The files stay on disk; the working tree stops showing them. See
+# vault/00-how-i-use-this.md.

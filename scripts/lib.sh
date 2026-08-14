@@ -1,6 +1,69 @@
 # Shared helpers for scripts/sweep.sh and scripts/fanout.sh. Not executable
 # on its own; sourced.
 
+# ---------------------------------------------------------------------------
+# Machine provenance guard.
+#
+# Every dataset committed to results/ was measured on an Intel i3-1115G4
+# (2 physical cores + SMT), bare metal. THAT LAPTOP FAILED on 2026-08-14; its
+# SSD now runs as a dual boot in an AMD Ryzen 9 270 (8C/16T). The committed
+# numbers are therefore valid as measured but NOT reproducible on the hardware
+# that now exists -- see results/PROVENANCE.md.
+#
+# Without a guard the obvious accident is a plain `make sweep` on the new box
+# silently overwriting results/sweep.csv, leaving one file holding two
+# machines' numbers with nothing to distinguish them. We have already
+# destroyed a committed dataset once this way (results/fanout.csv, recovered
+# from git), and that time the two datasets at least differed by a flag name
+# in the log. Two different CPUs in one CSV would be invisible.
+#
+# So: if the CPU is not the machine the canonical datasets came from, refuse
+# to write a canonical filename. OUT_SUFFIX is still allowed, because
+# measuring the new machine deliberately, into its own file, is fine and is
+# how a cross-platform comparison would be built.
+ZC_DATASET_CPU=${ZC_DATASET_CPU:-"Intel(R) Core(TM) i3-1115G4"}
+
+current_cpu() {
+    grep -m1 '^model name' /proc/cpuinfo 2>/dev/null | sed 's/^model name[[:space:]]*:[[:space:]]*//'
+}
+
+# Usage: check_machine "$OUT"
+check_machine() {
+    local out="$1" cpu
+    cpu=$(current_cpu)
+    [ -n "$cpu" ] || return 0
+
+    case "$cpu" in
+        *"$ZC_DATASET_CPU"*) return 0 ;;
+    esac
+
+    echo "" >&2
+    echo "=========================================================" >&2
+    echo " MACHINE MISMATCH" >&2
+    echo "   committed datasets: $ZC_DATASET_CPU" >&2
+    echo "   this machine:       $cpu" >&2
+    echo "=========================================================" >&2
+
+    if [ -z "${OUT_SUFFIX:-}" ]; then
+        echo "refusing to write '$out' on a different CPU than the committed" >&2
+        echo "data came from -- it would mix two machines into one file." >&2
+        echo "" >&2
+        echo "  measure this machine into its own dataset:" >&2
+        echo "    OUT_SUFFIX=_ryzen  <the same command you just ran>" >&2
+        echo "" >&2
+        echo "  or override deliberately (you almost never want this):" >&2
+        echo "    ZC_DATASET_CPU='$cpu'  <the same command you just ran>" >&2
+        echo "" >&2
+        echo "See results/PROVENANCE.md." >&2
+        exit 1
+    fi
+
+    echo "OUT_SUFFIX is set, writing '$out' -- record the CPU in" >&2
+    echo "results/PROVENANCE.md or this file becomes unattributable." >&2
+    echo "" >&2
+}
+# ---------------------------------------------------------------------------
+
 # Warn (do not fail) if any cpuidle state deeper than C1 is enabled. A
 # governor that predicts a long idle gap between messages can pick a deep
 # C-state; waking from it costs its exit latency, which lands directly in

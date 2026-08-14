@@ -76,6 +76,7 @@ PIN=""
 if [ "$(nproc)" -ge 4 ]; then PIN=$(pick_cores); fi
 [ -n "$PIN" ] && echo "pinning: $PIN" >&2 || echo "pinning: none" >&2
 
+check_machine "$OUT"
 check_cstates
 
 echo "rate fraction: ${GAP:+GAP override=$GAP us}${GAP:-${RATE_FRACTION}% of saturation}" >&2

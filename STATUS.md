@@ -1,8 +1,37 @@
 # STATUS — session handoff
 
-Last updated: 8 Aug 2026. Read this after `CLAUDE.md` and before doing
+Last updated: **14 Aug 2026**. Read this after `CLAUDE.md` and before doing
 anything. It records decisions and open problems that exist nowhere in the
 code, and that a fresh session will otherwise get wrong.
+
+---
+
+## ⚠ READ FIRST — the measurement machine is gone (14 Aug)
+
+The **Intel i3-1115G4 laptop failed.** Its SSD was moved into the **AMD Ryzen
+9 270 (8C/16T)** and now runs there as a dual boot. That Ryzen is the only
+machine: Windows + WSL2 (Kali) on one side, the Ubuntu SSD on the other.
+
+**Every CSV in `results/` was measured on the i3.** They are valid as
+measured and are NOT being re-taken. Full statement in
+`results/PROVENANCE.md` — read it before touching any dataset.
+
+`scripts/lib.sh:check_machine()` now **refuses** to write a canonical dataset
+filename (`results/sweep.csv`, `results/fanout.csv`, `results/hugepage_ab.csv`)
+on a CPU that is not the i3. Set `OUT_SUFFIX=_ryzen` to measure the new
+machine into its own file. **Do not defeat this guard** — mixing two CPUs into
+one CSV is invisible after the fact, and we have already destroyed one
+committed dataset by overwriting it.
+
+The headline claims stay anchored to the i3. A dead laptop does not change
+which platform the claims should be *about*, and 2–4 cores is what embedded
+deployment looks like. Any Ryzen dataset is secondary and labelled, and the
+question it answers is **"do the conclusions survive a different
+microarchitecture?"** (Zen vs Tiger Lake, 8 cores vs 2) — not "are the numbers
+bigger". That is a *better* experiment than the N=8 scaling run cancelled on
+9 Aug, but it comes after the Stage 1 form text and demo video, not before.
+
+---
 
 ## Where the project stands
 
@@ -18,9 +47,48 @@ code, and that a fresh session will otherwise get wrong.
   `_Static_assert`s in the header now enforce that. TSan clean. Full
   derivation in `src/zcring.h` §§5–10. See "Adaptive notification" below for
   what a fresh session needs to know.
+- **Layer 3 designed, not built** (9 Aug) — `docs/LAYER3_DESIGN.md` is the
+  full brief: threat model, architecture, phasing, decision gate. **Read it
+  before writing a line of kernel code.** Chosen as the next build item on
+  14 Aug over the Stage 1 form text. See "Layer 3" below.
+- **Stage 1 artifacts**: architecture diagram ✅ (254 KB), deck ✅ (85 KB,
+  11 slides). **Form text ❌ not started. Demo video ❌ not started. Repo
+  still private ❌.** These three are what stand between the project and a
+  submitted entry — see `HACKATHON.md` for the field list.
 - **Not started**: `eventfd`/`epoll` bridge, crash recovery for producers,
   determinism rigor (isolcpus / nohz_full / PREEMPT_RT), iceoryx and ZeroMQ
-  comparators, presentation.
+  comparators.
+
+## Layer 3 — kernel-enforced arbitration (designed 9 Aug, build starting)
+
+The answer to *"how is this not iceoryx?"*, and it scores on **Novelty &
+Innovation** *and* **Security** — the two criteria this project is weakest on.
+
+The argument in one line: **a broker daemon can decide who attaches, but it
+cannot revoke a page the MMU has already been told is writable.** Only the
+kernel can hand out a mapping that is physically unable to write. `zcring`
+today has exactly the iceoryx weakness — say so plainly, it sets up the fix.
+
+**The constraint that must not be violated: the kernel goes in the setup path,
+never the data path.** Create/attach/permissions/evict are ioctls, once per
+peer. `reserve`/`commit`/`acquire`/`release` stay byte-for-byte what is
+already measured. **Regression test: no number in `results/` may change.**
+
+**Build environment, decided 14 Aug.** Everything Layer 3 happens **in a VM**;
+the module is never loaded on bare metal. The old i3 had Secure Boot enabled
+and KVM unavailable; on the Ryzen, WSL2 works, so SVM is enabled in firmware
+and KVM should come up with at most `sudo modprobe kvm_amd`. Use `multipass`.
+Rationale and the full argument for why nothing in Layer 3 needs bare metal is
+in `docs/LAYER3_DESIGN.md` §8.
+
+**Phase 1 only, then stop and report:** misc device `/dev/zcring`,
+`CREATE`/`ATTACH` ioctls, `mmap` applying the arena read-only for consumers.
+No layout change; ABI stays v2. *Opus 5* — the `VM_MAYWRITE` class of mistake
+is silent, and a bug here is a panic rather than a failed test.
+
+**The gate: if Phase 1 is not working by end of day 3, stop and ship Layers
+1–2.** A half-built kernel module is worse than none. Layers 1–2 are already a
+complete, measured, reproducible submission. Layer 3 is upside, not rescue.
 
 ## Read this before quoting any fan-out number
 

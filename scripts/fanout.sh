@@ -75,6 +75,7 @@ echo "consumer cpu list: $CONS" >&2
 echo "consumers per run: $NCONS  (wrapping over the list above)" >&2
 echo >&2
 
+check_machine "$OUT"
 check_cstates
 
 echo "rate fraction: ${GAP:+GAP override=$GAP us}${GAP:-${RATE_FRACTION}% of saturation}" >&2

@@ -50,6 +50,11 @@ WARMUP=${WARMUP:-2000}
 PROD=${PROD:-2}
 CONS=${CONS:-3}
 
+# This script takes OUT rather than OUT_SUFFIX, so satisfy the machine guard
+# by setting OUT_SUFFIX when OUT has already been pointed somewhere custom.
+[ "$OUT" = "results/hugepage_ab.csv" ] || OUT_SUFFIX=${OUT_SUFFIX:-custom}
+check_machine "$OUT"
+
 sudo -n cpupower idle-info >/dev/null 2>&1 || {
     echo "need passwordless sudo for cpupower; see RUNNING.md §4a" >&2; exit 1; }
 

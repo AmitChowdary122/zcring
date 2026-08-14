@@ -167,10 +167,23 @@ which the isolcpus/nohz_full/PREEMPT_RT work is meant to close.
 
 ## Machines
 
+**The measurement laptop died on 14 Aug 2026.** Its SSD was moved into the
+Ryzen machine and now dual-boots there. Every committed number came from
+hardware that no longer exists: valid as measured, **not reproducible by us on
+demand**. `scripts/lib.sh:check_machine()` refuses to write a canonical
+dataset filename on a non-i3 CPU — do not defeat it. Full statement in
+`results/PROVENANCE.md`.
+
 | Machine | Role |
 |---|---|
-| Ryzen 9 270, 8C/16T, **WSL2 (Kali)** | Development. Fast builds. |
-| **Intel i3-1115G4, 2 physical cores + SMT, bare-metal Ubuntu** | **All quoted measurements.** |
+| **Intel i3-1115G4, 2 physical cores + SMT** | **All quoted measurements. DEAD 14 Aug.** |
+| **Ryzen 9 270, 8C/16T** — Ubuntu SSD as dual boot, plus WSL2 (Kali) on Windows | The only machine now. Development, builds, the Layer 3 VM. |
+
+The claims stay anchored to the i3 regardless. A dead laptop does not change
+which platform the claims should be *about*, and 2–4 cores is what embedded
+deployment looks like. Any Ryzen run is a secondary, labelled dataset
+(`OUT_SUFFIX=_ryzen`), and its value is answering "do the conclusions survive
+a different microarchitecture?" — not "are the numbers bigger".
 
 The measurement box is **dual-core with SMT** (`nproc` reports 4, but
 `lscpu` shows 2 cores/socket). Describe it as "dual-core with SMT", never as
