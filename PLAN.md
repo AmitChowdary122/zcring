@@ -31,66 +31,56 @@ Working budget: ~5 weeks at 4–6 h/day ≈ **150–200 hours**. That is enough 
 
 ## 2. Why this problem statement
 
-Two of the eight statements are hardware-gated (SRAM PUF, HRoT) and are unwinnable on laptop + VMs. Two more (Fast Path IPC, Kernel Sprint) require *beating mainline Linux* — betting a month on finding a real regression in code that has absorbed thousands of engineer-years, where the likely outcome is "3% ± noise." Two (Intent-Store, Watchdog) are userspace apps that read as thin at a kernel hackathon, and will be crowded because solo teams flee toward them.
-
-This statement is the one where **you own the baseline**. You are not trying to beat tuned kernel code; you are building a framework whose advantage over `pipe(2)` is structural — you deleted two memory copies, and no amount of tuning recovers those. The win is guaranteed by construction. That is a rare property and it is why this is the pick.
+This statement is the one where **you own the baseline**. You are not trying
+to beat tuned kernel code; you are building a framework whose advantage over
+`pipe(2)` is structural — you deleted two memory copies, and no amount of
+tuning recovers those. The win is guaranteed by construction, which is a rare
+property in a hardware/timeline-constrained solo project.
 
 ---
 
 ## 2a. What the rules change
 
-Four clauses in the official rules materially affect strategy.
-
 ### "Projects will be evaluated based on innovation, feasibility, scalability, and impact."
-Note what is **absent**: raw performance and technical depth are not named criteria. Benchmark rigor is not self-justifying — it only scores insofar as it evidences one of the four words. Every major work item must therefore be mapped to a criterion, and any item that maps to none gets cut. See §3a.
-
-This is the most important correction in the plan. A submission optimized purely for "we made it fast" is optimized for a rubric that does not exist here.
-
-### "One team can submit solutions for more than one problem statement."
-A genuine hedge is available. *Fast Path: Linux Kernel IPC* shares roughly 70% of its infrastructure with this project — same benchmark harness, same latency methodology, same `perf` tooling, same comparators. If profiling the baselines in Weeks 1–3 surfaces a real bottleneck in `af_unix` or the pipe path (which it plausibly will, since you will be staring at those profiles anyway), that finding can be written up as a **second** submission at marginal cost.
-
-Treat this as opportunistic, never as a planned second project. Two half-built prototypes lose to one finished one. The rule to apply: a second entry happens only if it costs less than ~10 hours on top of work already done.
+Raw performance and technical depth are not named criteria on their own —
+benchmark rigor matters insofar as it evidences one of the four words above.
+Every major work item is mapped to a criterion in §3a; work that maps to
+none gets cut.
 
 ### "Once a problem statement is finalized, it cannot be changed."
-No pivoting after commitment. This raises the value of Week 1's exit criterion — get real numbers *before* the abstract locks you in.
-
-### "If no submission qualifies in a track, the Committee may withhold or reallocate the prize."
-Prizes are per-track/per-category, so you compete against the field *within* your statement, not against all 8. This strengthens the case for a low-competition kernel statement over a crowded AI one — and it means a thin field in Track 1 raises your odds directly. It also means "qualifying" has an absolute bar, not just a relative one: a polished, complete, working artifact matters more than an ambitious broken one.
+No pivoting after commitment. This raises the value of Week 1's exit
+criterion — get real numbers *before* the abstract locks you in.
 
 ### Originality
 All submissions must be original and plagiarism-free. iceoryx, ZeroMQ, and the rest appear **only as benchmark comparators** — never as incorporated code. Keep the boundary between your implementation and third-party libraries explicit in both the repo and the slides, and check licences on anything you link against.
 
-### One honest note on team size
-Rules permit 1–5 members. Solo is allowed, but it is a *choice* here, not a constraint. Adding even one competent person — particularly to own benchmarking and the presentation while you own the core — is the single highest-leverage change available to this plan. If anyone credible is within reach, recruiting them in the first days beats any technical decision in this document. If not, the plan below stands as written.
+### Team size
+Rules permit 1–5 members; solo is allowed and is what this plan assumes.
 
 ---
 
-## 3. What separates a winning submission from a competent one
-
-The 70th-percentile submission is: a shared-memory ring buffer, benchmarked against pipes, one throughput bar chart. Expect several of these.
-
-Five things separate from that, in descending order of payoff:
+## 3. Priorities, in descending order of payoff
 
 ### 3.1 Determinism, not throughput — the headline
-The problem statement says *"deterministic, high-performance communication for real-time embedded applications."* Most teams will report mean latency and throughput. Real-time engineers do not care about the mean; they care about the tail. Reporting **p99 / p99.9 / p99.99 latency and jitter histograms** answers the statement as literally written, and almost nobody will do it. This is the single highest-leverage differentiator available.
+The problem statement says *"deterministic, high-performance communication for real-time embedded applications."* Reporting **p99 / p99.9 / p99.99 latency and jitter histograms**, not just mean latency and throughput, answers the statement as literally written.
 
-### 3.2 The flat-vs-linear graph — the money shot
-Copy-based IPC latency grows linearly with payload size. True zero-copy latency is **flat**. Plot both on the same axes across a 64 B → 4 MB payload sweep. One curve climbs, one is a horizontal line. That single graph communicates the entire contribution in about three seconds and is the slide the judges will remember.
+### 3.2 The flat-vs-linear graph
+Copy-based IPC latency grows linearly with payload size. True zero-copy latency is **flat**. Plotting both on the same axes across a 64 B → 4 MB payload sweep communicates the entire contribution in one graph.
 
 ### 3.3 The notification problem — where the engineering shows
-Zero-copy data transfer is the easy half. The hard half is waking the consumer *without a syscall on the fast path*. The sophisticated answer is adaptive: spin on the sequence counter for N nanoseconds, then fall back to `FUTEX_WAIT`; the producer issues `FUTEX_WAKE` only when a waiter flag is set. This is the part that distinguishes someone who understands IPC from someone who wrote a ring buffer.
+Zero-copy data transfer is the easy half. The hard half is waking the consumer *without a syscall on the fast path*. The adaptive answer: spin on the sequence counter for N nanoseconds, then fall back to `FUTEX_WAIT`; the producer issues `FUTEX_WAKE` only when a waiter flag is set.
 
 ### 3.4 Robustness — what makes it deployable rather than a toy
-What happens when a producer dies holding a slot? Stale-slot reclamation, bounded-time recovery, and a defined behaviour under peer crash. CDAC judges care about deployability. This section also pre-empts the most obvious hostile question.
+What happens when a producer dies holding a slot? Stale-slot reclamation, bounded-time recovery, and a defined behaviour under peer crash.
 
 ### 3.5 Fan-out — where the advantage becomes multiplicative
-One producer, N consumers, all reading the same buffer with zero copies. Copy-based IPC pays N copies; you pay zero. The gap widens linearly with N, which makes for a second strong graph.
+One producer, N consumers, all reading the same buffer with zero copies. Copy-based IPC pays N copies; zcring pays zero. The gap widens with N.
 
 ---
 
-## 3a. Mapping the work to the actual rubric
+## 3a. Mapping the work to the rubric
 
-Innovation, feasibility, scalability, impact. Every work item below earns its place against one of these, and the presentation should use these four words explicitly — judges score against a sheet, and making their job easy is worth real points.
+Innovation, feasibility, scalability, impact — every work item below is mapped to one of these.
 
 | Criterion | What carries it | Where it shows |
 |---|---|---|
@@ -99,10 +89,10 @@ Innovation, feasibility, scalability, impact. Every work item below earns its pl
 | **Scalability** | Fan-out to N consumers where the advantage grows *linearly with N*; same framework spans IoT → embedded → desktop; multi-core behaviour under load | §3.5, consumer-count sweep in §5 |
 | **Impact** | Deterministic tail latency is the blocker for real-time embedded workloads; camera → inference → display pipeline as a concrete deployable use case; robustness under peer crash | §3.1, §4 Layer 4, §7 demo |
 
-Two consequences:
-
-- **Fan-out is promoted from "nice extra" to core deliverable.** It is the only work item that speaks directly to *scalability*, which is a full quarter of the rubric. It moves up in Week 2 priority accordingly.
-- **The concrete use case is not decoration.** A generic "IPC is faster" story scores weakly on *impact*. A specific embedded pipeline that is impossible without this framework scores well. Build the demo around the use case, not around the microbenchmark.
+Fan-out is the only work item that speaks directly to *scalability*, so it's
+a core deliverable rather than a nice-to-have. The demo is built around a
+concrete embedded use case (the camera pipeline) rather than around the
+microbenchmark alone, for the same reason.
 
 ---
 

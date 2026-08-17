@@ -24,3 +24,4 @@ perf.data*
 #     # then re-add the line `vault/` below this comment block
 # The files stay on disk; the working tree stops showing them. See
 # vault/00-how-i-use-this.md.
+vault/

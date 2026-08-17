@@ -21,7 +21,7 @@ before building** — compiling on `/mnt/c` goes through a translation layer
 that is slow and can produce odd permission errors.
 
 ```bash
-cp -r /mnt/c/Users/amitc/Documents/SSM_CDAC_Hackathon ~/zcring
+cp -r /mnt/c/Users/<you>/Documents/SSM_CDAC_Hackathon ~/zcring
 cd ~/zcring
 sudo apt update && sudo apt install -y build-essential
 ```

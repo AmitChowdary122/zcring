@@ -6,35 +6,13 @@ including this one.** Then this file, which is the summary that keeps a fresh
 session from making expensive mistakes. `PLAN.md` has the strategy, `README.md`
 the benchmark methodology, `RUNNING.md` the operational detail.
 
-## How this project is worked — read before doing anything
+## How this project is worked
 
-Two tools, two jobs. **Cowork plans; Claude Code executes.** The user runs a
-Cowork session to decide *what* to do and to draft the instruction, then hands
-that instruction to Claude Code, which does the building and measuring. Cowork
-does not write kernel code or run benchmarks; Claude Code does not decide
-scope or wording.
-
-If you are **Cowork**, at the start of every session:
-
-1. `HACKATHON.md` — only if the task touches rules, dates or the form.
-2. **`vault/INDEX.md`** — the working-memory index, ~90 lines. It is the
-   cheapest way to find out what has already been decided, measured,
-   retracted, or got wrong once. Open only the notes your task names; do not
-   bulk-read it.
-3. `STATUS.md` — current build and measurement state. Authoritative over the
-   vault whenever they disagree.
-
-Then produce an instruction precise enough to hand over, and **say which model
-to use** (Sonnet 5 by default; Opus 5 for `src/zcring.h`, kernel code, and
-strategy or writing work).
-
-If you are **Claude Code**: read `STATUS.md`, then whatever design doc the
-instruction names. The `vault/` directory is Cowork's notebook — you may read
-it, but `STATUS.md` is the contract between machines and the place your
-findings must be written back to.
-
-**`vault/` is committed but must be untracked before the repo is made public
-at submission** — `git rm -r --cached vault/`. See `.gitignore`.
+Built with AI-assisted development: a planning session drafts scope and
+instructions, Claude Code builds and measures against them. `STATUS.md` is
+the authoritative build/measurement state and the handoff point between
+sessions — read it first. `vault/` is a local working-memory notebook; it is
+gitignored and not part of this repo's public history.
 
 ## What this is
 
@@ -60,36 +38,24 @@ The trap in the official schedule: the prototype demo follows the abstract by
 about a week, so there is no build window between the two gates. Treat 25 Aug
 as the date everything must work by.
 
-## Evaluation rubric — this drives priorities
+## Evaluation rubric
 
-**Superseded — see `HACKATHON.md` for the real, much more detailed rubric.**
-The four-word summary below was an early approximation; the actual criteria
-add *AI/Technical Approach*, *Security*, *Documentation Quality*, *User
-Experience*, and score the **architecture diagram itself**. Two consequences
-worth carrying here:
+See `HACKATHON.md` for the full rubric (innovation, feasibility, scalability,
+impact, AI/technical approach, security, documentation, UX — the architecture
+diagram is scored directly). Two criteria shape the architecture here:
 
-- **AI/ML is a CORE criterion. As of 8 Aug the project has an answer.** The
-  adaptive spin-then-futex threshold, learned online from the observed
-  inter-arrival distribution, is **built** — see STATUS.md "Adaptive
-  notification" and `src/zcring.h` §§5–10. Model Type on the form is
-  **Inbuilt Model**. Frame it as an online-learned adaptive policy, never as
-  "AI". Do not bolt on an LLM. See HACKATHON.md.
-- **Security is scored**, which promotes Layer 3 kernel arbitration: it now
-  scores on both *Novelty* and *Security*.
+- **AI/Technical Approach.** The adaptive spin-then-futex notification
+  threshold, learned online from the observed inter-arrival distribution, is
+  the project's answer — see STATUS.md "Adaptive notification" and
+  `src/zcring.h` §§5–10. It's an in-house, purpose-built online-learned
+  policy (Model Type: Inbuilt Model on the submission form), not a bolted-on
+  LLM.
+- **Security.** Layer 3 (kernel-enforced arbitration) is the response — see
+  "Architecture" below.
 
-Earlier approximation, still directionally useful: judged on **innovation,
-feasibility, scalability, impact**; a benchmark number only scores insofar as
-it evidences one of them.
-
-Practical consequences:
-
-- **Fan-out to N consumers is a core deliverable, not a nice-to-have.** It is
-  the only work item that speaks directly to *scalability*.
-- **A concrete embedded use case matters more than microbenchmarks.** "IPC is
-  faster" scores weakly on *impact*; "this camera → inference → display
-  pipeline is impossible without it" scores well.
-- **Reproducibility counts as *feasibility*.** Pinned environments, scripted
-  benchmarks, and committed raw data are worth real points.
+Fan-out to N consumers, a concrete embedded use case (the camera pipeline
+demo), and committed reproducible benchmark data are all core deliverables
+here, not nice-to-haves.
 
 ## Current state
 
@@ -112,88 +78,29 @@ Layer 1 is **complete and validated**:
 Without it, the harness stamps and reads only an 8-byte header while the
 payload is never actually written or read. zcring then moves 8 real bytes and
 asserts the rest exists, while pipe and unix genuinely move all of them. The
-result is a beautiful flat line — latency apparently independent of payload
-size — that is **an artifact of the harness, not a property of the design**.
-One judge asking "does your consumer ever touch the data?" destroys it, and
-takes the credibility of everything adjacent with it.
+result is a flat line — latency apparently independent of payload size — that
+is **an artifact of the harness, not a property of the design**.
 
 `scripts/sweep.sh` now passes `--touch` unconditionally. Do not add an escape
 hatch.
 
-### Claims that are defensible (measured bare metal, gated regen, 1 Aug 2026)
+### Current, defensible numbers
 
-- Removes the **syscall from the data path** entirely.
-- Eliminates **two of four memory passes**, but note this does *not* yield 2×
-  at large payloads — see below.
-- **64 B: 18–20× vs pipe. 1 KiB: ~9.5–10×. 4 KiB: 3.66× (conservative; a
-  cleaner re-measurement gives 4.14×).** Small-message latency is the real
-  story, and it is the regime embedded real-time control lives in.
-  **Quote 64 B as a range, not as 19.6×** — the full suite was re-measured on
-  a separate occasion and the comparators came out 5–12% faster at small
-  payloads, giving 18.23× rather than 19.62×. zcring itself reproduced within
-  2% everywhere. A range across two sessions is the defensible claim.
-- **Large payloads (256 KiB–1 MiB) LOSE to a UNIX socket at N=1** (0.68×–
-  0.84×), under the C-state-disabled configuration this project requires for
-  the small-message determinism claim below. Confirmed independent of
-  thermal state, offered rate, **and (8 Aug) of whether the consumer spins or
-  genuinely blocks on a futex** — a real, disclosed trade-off, not a bug or
-  measurement artifact. See README.md's "Why large payloads lose here".
-  **Superseded sub-claim:** "pipe/unix are not affected by the C-state
-  setting" was rate-specific and is now known to be false at low message
-  rates — at a 2 ms gap, unix is 36.7% *faster* with C-states disabled,
-  because a blocking consumer's core pays idle-state exit latency on wake.
-  Do not repeat the old general form.
-- **Fan-out wins the large-payload case back from N=2 on.** At 1 MiB:
-  **0.82× at N=1, 1.36× at N=2** under the shipping `--notify` waiter
-  (`results/fanout_notify.csv`). A genuine crossover — publication is O(1) in
-  N, copying transports are O(N).
-  **Do NOT claim growth past N=2.** The old 2.03× at N=4 was measured under
-  `--yield`, a flag that no longer exists; under `--notify` N=4 gives 1.24×
-  because `FUTEX_WAKE` makes four consumers runnable at once on two physical
-  cores and they thunder (64 B N=4: 1.03 µs → 12.3 µs). That is
-  oversubscription, not a transport property.
-  **Do not chase this with a bigger machine.** One producer plus four
-  consumers is oversubscribed on a 4-core embedded target too — every
-  consumer runs on every message, so consumer count is bounded by core count
-  on any platform. That is a deployment property, not a measurement defect.
-  The crossover sits at **N=2**, which fits on every embedded part there is,
-  and this hardware measures it fine. A prettier N=8 number from a desktop
-  CPU would be *less* representative of the problem statement, not more.
-- **Small payloads lose their entire advantage under `--notify`** (18.3× →
-  0.93× at 64 B) because the syscall comes back. This is derived, not a bug —
-  see `zcring.h` §5. **The 18–20× headline is a dedicated-core (spin) number
-  and must be stated as such.** `sweep.sh` defaults to `WAITER=spin` for
-  exactly this reason.
+`README.md`'s "Measured Layer 1 results" and "Fan-out results" sections are
+authoritative — read those, not this file, for anything quoted externally.
+In short: 64 B is 18–20× vs pipe (quoted as a range, reproduced across two
+independent measurement sessions), large payloads (256 KiB–1 MiB) lose to a
+UNIX socket at N=1 under the C-state-disabled configuration the determinism
+claim requires (disclosed trade-off, see README's "Why large payloads lose
+here"), and fan-out wins that back from N=2 on (0.82× → 1.36× at 1 MiB,
+`results/fanout_notify.csv`) — do not claim growth past N=2, see README's
+fan-out section for why. p99.9 is quotable at N=1 with deep C-states
+disabled (1.04 µs mean); p99.99 is not yet.
 
-**Two earlier versions of this file made claims that did not survive
-follow-up measurement.** First a "~2× floor" at 1 MiB (VM data, wrong on
-bare metal). Then the "1.1–1.5× large-payload win" that replaced it turned
-out to be measured under a C-state configuration that predates and
-conflicts with the tail-latency fix below — under the correct,
-determinism-first configuration, large payloads *lose* at N=1. Do not
-reinstate either. Current numbers come from `results/sweep.csv` /
-`results/fanout.csv`, regenerated with thermal gating and a justified
-per-size offered rate (`RATE_FRACTION`) — see README.md for the full
-methodology and sensitivity check.
-
-**Lead with small-message latency, not with a bandwidth multiplier.** State
-the large-payload trade-off yourself before a judge finds it; then show
-fan-out, which is where the large-payload case is genuinely won back (N
-consumers = N copies avoided, so the advantage grows with N and crosses
-from a loss at N=1 to a 2×+ win by N=4).
-
-- **The whole dataset was re-measured on a separate occasion** into
-  `results/{sweep,fanout}_verify.csv`, from a clean boot with the machine
-  re-quieted from scratch. The fan-out crossover reproduced within 1.5% at
-  every point (0.82/1.38/2.03× → 0.82/1.38/2.06× at 1 MiB). This is
-  *feasibility* evidence in rubric terms and should be said out loud — almost
-  no competing submission will have re-measured itself. See README.md's
-  "Reproducibility" section.
-
-**p99.9 is quotable at N=1 with deep C-states disabled** (1.04 µs mean,
-sub-2 µs range — see README.md). p99.99 is not yet; still shows occasional
-excursions from a smaller, separate noise source (IRQ/scheduling jitter),
-which the isolcpus/nohz_full/PREEMPT_RT work is meant to close.
+Several earlier claims in this file did not survive follow-up measurement
+and were retracted rather than quietly replaced — see README.md and
+`results/PROVENANCE.md` for what's current. Don't resurrect a superseded
+number from git history without re-verifying it.
 
 ## Machines
 
@@ -285,29 +192,14 @@ suggest. Still gated on Layers 1–2 being solid.
 7. **Demo + presentation.** Reserved for the final week. Do not spend it
    coding.
 
-## Shared memory across machines and sessions
+## Persisting state across sessions
 
-This project runs on two machines (Windows/Cowork for planning and docs,
-bare-metal Ubuntu/Claude Code for building and measuring) and across many
-sessions. **No model remembers anything between sessions. The repo is the
-only memory.**
-
-`STATUS.md` is that memory. It holds current state, open problems, decisions
-already made, and traps already hit. It is read by whichever machine picks
-the work up next.
-
-Obligations, both machines:
-
-- `git pull` **before** starting work. `git push` **when stopping.**
-- **Update `STATUS.md` at the end of any working session** — findings,
-  decisions, anything discovered that is not obvious from the code. A result
-  reported only in chat is lost the moment the session closes. This has
-  already nearly cost us the C-state finding and the offered-rate problem.
-- Design rationale goes in the relevant header, not in chat. `src/zcring.h`
-  is the model to follow.
-- In the Windows working tree, stage files **by name**. Never `git add -A`
-  there: it only ever holds current doc edits, everything else in it is stale,
-  and a blind `-A` once reverted a Makefile fix and clobbered a dataset.
+No model remembers anything between sessions — the repo is the only memory.
+`STATUS.md` holds current state, open problems, decisions already made, and
+traps already hit; update it at the end of any working session, since a
+result reported only in chat is lost the moment the session closes. Design
+rationale goes in the relevant header, not in chat — `src/zcring.h` is the
+model to follow. `git pull` before starting work, `git push` when stopping.
 
 ## Working conventions
 
