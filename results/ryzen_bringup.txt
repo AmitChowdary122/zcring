@@ -1,0 +1,44 @@
+=== CPU ===
+CPU(s):                                  16
+Model name:                              AMD Ryzen 9 270 w/ Radeon 780M Graphics
+Thread(s) per core:                      2
+Core(s) per socket:                      8
+CPU(s) scaling MHz:                      36%
+=== cpuidle driver ===
+(none)
+  POLL exit=0us
+  C1 exit=1us
+  C2 exit=18us
+  C3 exit=350us
+=== cpupower ===
+Idlestate 0 disabled on CPU 0
+Idlestate 1 disabled on CPU 0
+Idlestate 2 disabled on CPU 0
+=== build ===
+cc -O2 -std=c11 -Wall -Wextra -Wno-unused-parameter -pthread -c src/zcring.c -o build/zcring.o
+cc -O2 -std=c11 -Wall -Wextra -Wno-unused-parameter -pthread bench/bench.c build/zcring.o -o build/bench -pthread
+cc -O2 -std=c11 -Wall -Wextra -Wno-unused-parameter -pthread tests/test_zcring.c build/zcring.o -o build/test_zcring -pthread
+=== test ===
+huge pages: auto degrades to a working ring whatever the system has
+    arena 8 MiB -> pages=thp-advise
+huge pages: strict mode is honest, and peers agree on the backing
+    pages=huge unavailable (Cannot allocate memory) — skipping the strict arm
+
+all checks passed
+=== tsan ===
+adaptive notification: broadcast wakes all 3 sleeping consumers
+adaptive notification: fast arrivals stay in the spin regime
+adaptive notification: bounded wait expires instead of hanging
+adaptive notification: no lost wakeups at the arm/publish boundary
+huge pages: auto degrades to a working ring whatever the system has
+    arena 8 MiB -> pages=thp-advise
+huge pages: strict mode is honest, and peers agree on the backing
+    pages=huge unavailable (Cannot allocate memory) — skipping the strict arm
+
+all checks passed
+=== 64B zcring ===
+  p99.99        291 ns
+  max         13485 ns
+=== 64B pipe ===
+  p99.99       7474 ns
+  max         11431 ns
