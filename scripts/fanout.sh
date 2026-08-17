@@ -61,17 +61,37 @@ NCONS=${NCONS:-"1 2 4"}
 # resources. On a 2-physical-core box that means one hyperthread is
 # deliberately left idle. Stated because it affects how the numbers should be
 # read, not hidden.
+#
+# Sibling exclusion goes through cpu_core_group() (scripts/lib.sh), derived
+# from thread_siblings_list, not a hardcoded index layout -- SMT sibling
+# numbering is platform-specific (see lib.sh).
 PROD=${PROD:-2}
-SIBS=$(cat /sys/devices/system/cpu/cpu$PROD/topology/thread_siblings_list 2>/dev/null || echo "$PROD")
-CONS=""
-for c in $(seq 0 $(($(nproc) - 1))); do
-    case ",$SIBS," in *",$c,"*) continue ;; esac
-    CONS="${CONS:+$CONS,}$c"
-done
-[ -n "$CONS" ] || { echo "no consumer CPUs outside the producer's core"; exit 1; }
+[ -d "/sys/devices/system/cpu/cpu$PROD" ] || { echo "cpu$PROD does not exist on this machine; set PROD=" >&2; exit 1; }
+PROD_GROUP=$(cpu_core_group "$PROD")
 
-echo "producer cpu:      $PROD (siblings: $SIBS)" >&2
-echo "consumer cpu list: $CONS" >&2
+CONS="" CONS_GROUPS=""
+for c in $(seq 0 $(($(nproc) - 1))); do
+    [ -d "/sys/devices/system/cpu/cpu$c" ] || continue
+    g=$(cpu_core_group "$c")
+    [ "$g" = "$PROD_GROUP" ] && continue
+    CONS="${CONS:+$CONS,}$c"
+    case ",$CONS_GROUPS," in *",$g,"*) ;; *) CONS_GROUPS="${CONS_GROUPS:+$CONS_GROUPS,}$g" ;; esac
+done
+[ -n "$CONS" ] || { echo "no consumer CPUs outside the producer's physical core"; exit 1; }
+
+# Belt and braces: the loop above excludes the producer's group by
+# construction, but check explicitly so a future edit to it can't silently
+# reintroduce a same-core pairing without anyone noticing.
+for c in ${CONS//,/ }; do
+    g=$(cpu_core_group "$c")
+    if [ "$g" = "$PROD_GROUP" ]; then
+        echo "FATAL: consumer cpu=$c shares physical core $g with producer cpu=$PROD -- refusing to run" >&2
+        exit 1
+    fi
+done
+
+echo "producer cpu:      $PROD (physical core $PROD_GROUP)" >&2
+echo "consumer cpu list: $CONS (physical cores: $CONS_GROUPS)" >&2
 echo "consumers per run: $NCONS  (wrapping over the list above)" >&2
 echo >&2
 

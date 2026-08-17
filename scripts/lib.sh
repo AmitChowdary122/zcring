@@ -71,6 +71,46 @@ check_machine() {
 # p99.9 that ranged 787ns-1.77ms across otherwise-identical reps, collapsing
 # to a consistent ~2us once disabled with `cpupower idle-set -D 0`. See
 # RUNNING.md #4a.
+
+# ---------------------------------------------------------------------------
+# Physical-core topology helpers, shared by sweep.sh and fanout.sh.
+#
+# Both scripts need to pin a producer and consumer(s) to distinct physical
+# cores -- SMT siblings share L1/L2 and flatter shared-memory IPC dishonestly
+# (see the traps note in STATUS.md: p99 inflated 185x once from this exact
+# mistake). The correctness has to come from the kernel's own topology data,
+# not from a hardcoded CPU index layout: SMT sibling numbering varies by
+# platform (adjacent pairs on some parts, offset-by-physical-core-count on
+# others -- this machine's cpuN/cpuN+8 pairing is the latter, the older
+# i3's cpu0/cpu2 + cpu1/cpu3 pairing was neither). A function that assumes
+# "cpu2 and cpu3 are different cores" is topology-blind and will silently
+# mis-pin on hardware it wasn't written against.
+expand_cpu_list() {
+    local spec="$1" part lo hi out=""
+    for part in ${spec//,/ }; do
+        case "$part" in
+            *-*) lo=${part%-*}; hi=${part#*-}
+                 while [ "$lo" -le "$hi" ]; do out="$out $lo"; lo=$((lo + 1)); done ;;
+            *)   out="$out $part" ;;
+        esac
+    done
+    echo "$out"
+}
+
+# The physical-core identity of a CPU, derived from thread_siblings_list --
+# the label is the lowest CPU number in the sibling set, which is stable
+# and needs nothing beyond that one file. thread_siblings_list can be a
+# flat comma list ("2,10") or contain ranges ("0-1") depending on
+# kernel/arch; expand_cpu_list normalises both before grouping, so a range
+# form doesn't silently fail to register as a sibling pair.
+cpu_core_group() {
+    local cpu="$1" sibs
+    sibs=$(cat "/sys/devices/system/cpu/cpu$cpu/topology/thread_siblings_list" 2>/dev/null)
+    [ -n "$sibs" ] || sibs="$cpu"
+    expand_cpu_list "$sibs" | tr ' ' '\n' | grep -v '^$' | sort -n | head -1
+}
+# ---------------------------------------------------------------------------
+
 check_cstates() {
     local base=/sys/devices/system/cpu/cpu0/cpuidle
     [ -d "$base" ] || return 0

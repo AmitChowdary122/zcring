@@ -49,32 +49,49 @@ case "$WAITER" in
 esac
 echo "zcring waiter: $WAITER" >&2
 
-# --- pick two cores that are NOT SMT siblings -------------------------------
-# Sibling threads share L1/L2, which flatters shared-memory IPC and makes the
-# comparison dishonest. Cross-physical-core is the realistic case.
+# --- pick two cores on distinct physical cores ------------------------------
+# Walks CPUs in ascending order and returns the first two whose
+# cpu_core_group() (scripts/lib.sh) differ -- i.e. derived from
+# thread_siblings_list, not from an assumed index layout. That matters
+# because SMT sibling numbering is platform-specific: adjacent pairs on some
+# parts, offset-by-physical-core-count on others (see lib.sh).
 pick_cores() {
-    local base=2 sibs cand
-    [ -d /sys/devices/system/cpu/cpu$base ] || { echo ""; return; }
-    sibs=$(cat /sys/devices/system/cpu/cpu$base/topology/thread_siblings_list 2>/dev/null || echo "$base")
-    for cand in $(seq 3 $(($(nproc) - 1))); do
-        case ",$sibs," in
-            *",$cand,"*) continue ;;
-        esac
-        # also reject if cand's sibling list contains base
-        local cs
-        cs=$(cat /sys/devices/system/cpu/cpu$cand/topology/thread_siblings_list 2>/dev/null || echo "$cand")
-        case ",$cs," in
-            *",$base,"*) continue ;;
-        esac
-        echo "--cpu-prod=$base --cpu-cons=$cand"
-        return
+    local cpu group prod="" prod_group=""
+    for cpu in $(seq 0 $(($(nproc) - 1))); do
+        [ -d "/sys/devices/system/cpu/cpu$cpu" ] || continue
+        group=$(cpu_core_group "$cpu")
+        if [ -z "$prod" ]; then
+            prod="$cpu"; prod_group="$group"
+            continue
+        fi
+        if [ "$group" != "$prod_group" ]; then
+            echo "$prod $cpu $prod_group $group"
+            return 0
+        fi
     done
-    echo ""
+    return 1
 }
 
 PIN=""
-if [ "$(nproc)" -ge 4 ]; then PIN=$(pick_cores); fi
-[ -n "$PIN" ] && echo "pinning: $PIN" >&2 || echo "pinning: none" >&2
+if [ "$(nproc)" -ge 4 ]; then
+    if PICKED=$(pick_cores); then
+        read -r PROD_CPU CONS_CPU PROD_GROUP CONS_GROUP <<< "$PICKED"
+        # Belt and braces: pick_cores() already guarantees this by
+        # construction, but a same-core pairing here would silently flatter
+        # zcring's numbers, so check it explicitly rather than trust the
+        # logic above never regresses.
+        if [ "$PROD_GROUP" = "$CONS_GROUP" ]; then
+            echo "FATAL: producer cpu=$PROD_CPU and consumer cpu=$CONS_CPU resolved to the same physical core (group $PROD_GROUP) -- refusing to run a dishonest comparison" >&2
+            exit 1
+        fi
+        PIN="--cpu-prod=$PROD_CPU --cpu-cons=$CONS_CPU"
+        echo "pinning: producer cpu=$PROD_CPU (physical core $PROD_GROUP), consumer cpu=$CONS_CPU (physical core $CONS_GROUP)" >&2
+    else
+        echo "pinning: none (could not find two CPUs on distinct physical cores)" >&2
+    fi
+else
+    echo "pinning: none (fewer than 4 logical CPUs)" >&2
+fi
 
 check_machine "$OUT"
 check_cstates
