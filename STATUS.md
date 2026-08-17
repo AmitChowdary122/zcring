@@ -58,6 +58,84 @@ bigger". That is a *better* experiment than the N=8 scaling run cancelled on
 - **Not started**: `eventfd`/`epoll` bridge, crash recovery for producers,
   determinism rigor (isolcpus / nohz_full / PREEMPT_RT), iceoryx and ZeroMQ
   comparators.
+- **Portability audit done** (17 Aug) — the shared-memory ABI now asserts
+  atomic lock-freedom and an architecture-aware cache-line size, and
+  cross-compiles clean for aarch64/riscv64. See below.
+
+## Portability audit — shared-memory ABI (17 Aug)
+
+`src/zcring.h` §12 is a new section: audits `zc_ctrl_t`/`zc_slot_t`/
+`zc_cons_t` (the structs two processes actually map, not `zc_ring_t` or
+`zc_waiter_t`, which are per-process by design) for three ways they could be
+wrong on a target other than the dead i3. **This is a portability audit, not
+a memory-model validation** — cross-compiling clean says the struct is
+byte-identical and its atomics are genuinely lock-free on that target, and
+says nothing about whether the acquire/release edges are sufficient on an
+architecture weaker than x86-TSO. QEMU would not have closed that gap either
+— it inherits the host's TSO regardless of which architecture it emulates —
+so this was compile-only, deliberately, on both new targets.
+
+**What changed:**
+
+- Every `_Atomic` field in the three ABI structs now has a `_Static_assert`
+  that it is unconditionally lock-free (`ZC_ATOMIC32/64_LOCK_FREE == 2`,
+  resolved via `_Generic` rather than assumed from `uint64_t`'s underlying
+  type). The failure mode this guards against is real and silent: a non-
+  lock-free atomic falls back to libatomic's per-process address-keyed lock
+  table, so two processes mapping the same ring would take *different*
+  locks on the same memory — corruption with no error, invisible to
+  `make tsan` since TSan only ever runs the single-process suite.
+- `ZC_CACHELINE` is now architecture-aware: 128 on aarch64 (common
+  coherence-granule size there), 64 elsewhere. This wasn't just the
+  `#define` — `zc_cons_t`'s `_pad` array was hardcoded to `[5]`, correct
+  only because it assumed a 64-byte target; it's now computed from
+  `ZC_CACHELINE`. The `zc_ctrl_t` layout asserts were previously hardcoded
+  literals (64, 128, 192, 1344...) that were only ever true for
+  `ZC_CACHELINE==64`; they're now expressed as multiples of `ZC_CACHELINE`
+  so a real ABI break still fails loudly on every target while a
+  legitimate per-architecture line-size difference no longer looks like
+  one. Also added: offset asserts for the previously-unchecked leading
+  fields (`version`..`map_size`), and `sizeof`/`offsetof` asserts for
+  `zc_slot_t`/`zc_cons_t` individually — neither had any before.
+- Type widths: the three ABI structs already contained nothing but
+  `uintN_t` fields (no `size_t`, no plain `long`, no pointer, no enum),
+  which is why they're portable across ILP32/LP64 without a separate ILP32
+  branch — `_Static_assert(sizeof(uint32_t)==4)` /
+  `(sizeof(uint64_t)==8)` now makes that fact checked, not just true by
+  convention. `zc_ring_t`/`zc_waiter_t` are exempt (documented per-process,
+  never shared).
+
+**Cross-compile results** (`-std=c11 -Wall -Wextra`, every `.c` file that
+includes the header: `zcring.c`, `test_zcring.c`, `bench.c`,
+`pipeline.c`):
+
+| target | result |
+|---|---|
+| x86_64 (native) | clean. `ZC_CACHELINE=64`, `sizeof(zc_ctrl_t)=1344` |
+| `aarch64-linux-gnu-gcc` | clean. `ZC_CACHELINE=128`, `sizeof(zc_ctrl_t)=2688` (= 21×128, same 21-cache-line shape as x86_64 at the larger line size) |
+| `riscv64-linux-gnu-gcc`, default march (rv64gc) | clean. `ZC_CACHELINE=64`, `sizeof(zc_ctrl_t)=1344` |
+| `riscv64-linux-gnu-gcc`, `-march=rv64imfdc...` (A extension explicitly stripped) | **both lock-free asserts fire, as designed** |
+
+**Correction to the premise this was scoped against**, worth flagging since
+it contradicts what "riscv64 without Zacas" suggests: riscv64's mandatory
+base ISA has no atomics, but the separate `A` extension (LR/SC + AMOs) does,
+and every mainstream riscv64 Linux distribution requires it — glibc itself
+needs it, so `riscv64-linux-gnu-gcc`'s default march already includes `A`.
+Verified directly: `ATOMIC_{INT,LONG,LLONG}_LOCK_FREE` are all `2` under the
+default march, no `Zacas` involved — LR.D/SC.D alone is enough for the
+compiler to call a `uint64_t` CAS unconditionally lock-free. `Zacas` (the
+newer single-instruction `amocas.d`) is a throughput improvement over an
+LR/SC retry loop, not a lock-freedom precondition. The assertions are
+therefore not currently load-bearing against any of this project's three
+default cross-compile targets — they're load-bearing against a march built
+*without* the `A` extension at all (a genuinely atomics-free embedded
+riscv64 core), which is what the fourth row above deliberately constructs to
+confirm the guard isn't dead code. Full derivation and the exact assert
+messages are in `src/zcring.h` §12.
+
+`make test` and `make tsan` both still pass on x86_64 after these changes
+(struct layout on x86_64 is byte-for-byte unchanged — `sizeof(zc_ctrl_t)`
+still 1344 — so no dataset in `results/` is affected).
 
 ## Layer 3 — kernel-enforced arbitration (designed 9 Aug, build starting)
 

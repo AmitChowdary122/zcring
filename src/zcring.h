@@ -532,6 +532,173 @@
  *
  * The layout under ZC_HUGE_OFF is byte-for-byte what it was before this
  * section existed, so results/ stays regenerable.
+ *
+ * ===========================================================================
+ * 12. Portability audit: the shared-memory ABI on other architectures
+ * ===========================================================================
+ *
+ * What this is not, stated first because it is the easiest claim to
+ * overreach on: this is a *portability* audit, not a memory-model
+ * validation. Cross-compiling clean for aarch64/riscv64 says the struct two
+ * processes map is byte-identical there and that its atomics are genuinely
+ * lock-free — it says nothing about whether the acquire/release edges
+ * elsewhere in this header are sufficient on an architecture weaker than
+ * x86-TSO. Running the test suite under QEMU would not close that gap
+ * either: QEMU's user-mode and system emulation on an x86 host execute
+ * through the host's own memory system, so a missing acquire or release
+ * cannot be falsified that way — QEMU inherits x86-TSO from the host
+ * regardless of which architecture it is emulating. Validating the ordering
+ * itself needs real weakly-ordered hardware (or a model checker), neither of
+ * which this audit had. Nothing here should be read as evidence for that
+ * question, and nothing below claims otherwise.
+ *
+ * Three things this header's shared-memory ABI can get wrong on a target it
+ * was never built for, and what guards each:
+ *
+ *   - An _Atomic type that is not always lock-free. See §12a below — this is
+ *     a correctness bug here, not a performance one, because the fallback is
+ *     a per-process lock table over shared memory.
+ *   - A cache-line size assumption baked into the layout. ZC_CACHELINE was a
+ *     bare 64 until this section; aarch64 commonly reports 128-byte
+ *     coherence granules (Neoverse, Apple silicon), and the fix has to
+ *     propagate through every _Alignas(ZC_CACHELINE) site, not just the
+ *     `#define` — see the zc_cons_t definition and §12b.
+ *   - A struct member whose size or alignment is not fixed across data
+ *     models. See §12c — the short version is that this header already
+ *     avoided the problem by using only uintN_t in the three ABI structs,
+ *     and §12c is what makes that fact checked rather than merely true by
+ *     current convention.
+ *
+ * ---------------------------------------------------------------------------
+ * 12a. Atomic lock-freedom
+ * ---------------------------------------------------------------------------
+ *
+ * Every _Atomic field in zc_slot_t, zc_cons_t and zc_ctrl_t lives in memory
+ * mapped by more than one process, which makes "is this type lock-free here"
+ * a correctness question in a way it normally is not. When the compiler
+ * cannot generate a lock-free instruction sequence for an _Atomic access, it
+ * calls into libatomic, which protects the access with a lock table keyed by
+ * the object's *address* — and that table is per-process. Two processes
+ * mapping the same ring at (in general) different virtual addresses would
+ * then serialise against two different locks that know nothing about each
+ * other. That is not a slower ring, it is an unsynchronised one: corruption
+ * with no error and nothing in `make tsan` to catch it, because TSan only
+ * ever exercises the single-process test suite.
+ *
+ * ZC_ATOMIC32_LOCK_FREE / ZC_ATOMIC64_LOCK_FREE (defined next to the
+ * assertions below) resolve via _Generic to whichever ATOMIC_*_LOCK_FREE
+ * macro actually matches uint32_t/uint64_t's real underlying type on the
+ * compiling target, rather than assuming e.g. "uint64_t is unsigned long" —
+ * true on LP64, false anywhere long is 32 bits, and assuming it is exactly
+ * the kind of thing this audit exists to not do.
+ *
+ * The trigger is narrower than "riscv64" and worth stating precisely rather
+ * than by architecture name, because the architecture name is not what
+ * determines it. riscv64's mandatory base ISA does not itself include atomic
+ * memory operations; they are the separate `A` extension (LR/SC plus AMOs),
+ * which every mainstream riscv64 Linux distribution requires — glibc itself
+ * needs it — so a stock riscv64-linux-gnu toolchain already targets rv64gc
+ * (`A` included) by default and both ZC_ATOMIC32/64_LOCK_FREE resolve to 2
+ * there: LR.D/SC.D is sufficient for the compiler to consider a `_Atomic
+ * uint64_t` CAS unconditionally lock-free, with no dependence on Zacas (the
+ * newer extension adding a single-instruction amocas.d) at all — Zacas is a
+ * throughput improvement over an LR/SC retry loop, not a lock-freedom
+ * precondition. Verified directly: cross-compiling with -march=rv64gc (the
+ * distribution default) hits neither assertion; deliberately dropping the
+ * `A` extension (-march=rv64imfdc, not a configuration any real riscv64
+ * Linux distribution ships) makes *both* fire, including the uint32_t one —
+ * see §12d. The real hazard this section guards against is therefore a
+ * riscv64 (or other) target built against a non-standard, atomics-free
+ * march — an intentionally restricted embedded core paired with a
+ * non-glibc/non-standard C library, not anything a stock cross-compiler
+ * produces by default.
+ *
+ * ---------------------------------------------------------------------------
+ * 12b. Cache-line size
+ * ---------------------------------------------------------------------------
+ *
+ * ZC_CACHELINE is now architecture-aware (128 on aarch64, 64 elsewhere) — see
+ * its definition. Changing it is not just a `#define`: every offset in
+ * zc_ctrl_t that used to be asserted as a literal (64, 128, 192, ...) was
+ * only ever correct for ZC_CACHELINE==64, and zc_cons_t's tail padding was
+ * sized the same way. Both are fixed here: the padding is computed from
+ * ZC_CACHELINE (see the struct), and the layout assertions below are
+ * expressed as multiples of ZC_CACHELINE rather than as numbers that were
+ * true once. That distinction matters for what a failing assert means: a
+ * real ABI break (field added, removed, reordered) still fails loudly on
+ * every target, while a different, legitimate cache-line size on a new
+ * architecture no longer looks like one.
+ *
+ * ---------------------------------------------------------------------------
+ * 12c. Type widths and layout across ILP32/LP64
+ * ---------------------------------------------------------------------------
+ *
+ * zc_slot_t, zc_cons_t and zc_ctrl_t contain nothing but uintN_t fields — no
+ * size_t, no plain long, no pointer, no enum. That was already true before
+ * this audit; what changes here is that it is now checked rather than
+ * merely a convention the next edit could quietly break. uintN_t is
+ * contractually exactly N bits with no padding bits whenever it exists at
+ * all (C11 7.20.1.1), so its size cannot shift between ILP32 and LP64 the
+ * way size_t or long can — which is why §12b's offset assertions, expressed
+ * purely in terms of these fixed-width members and ZC_CACHELINE, are already
+ * sufficient across both data models without needing a separate ILP32
+ * branch. zc_ring_t and zc_waiter_t are exempt from all of this: both are
+ * documented per-process, never-shared state (see their definitions), so
+ * their layout is free to vary by data model — only what crosses the
+ * memfd boundary needs to agree.
+ *
+ * ---------------------------------------------------------------------------
+ * 12d. What was actually checked, and the result
+ * ---------------------------------------------------------------------------
+ *
+ * Verified by cross-compiling every translation unit that includes this
+ * header (zcring.c, tests/test_zcring.c, bench/bench.c, demo/pipeline.c)
+ * with `aarch64-linux-gnu-gcc` and `riscv64-linux-gnu-gcc`, both
+ * `-std=c11 -Wall -Wextra` — compile-only, no execution: neither target has
+ * hardware or emulation set up for this project, and this section's opening
+ * paragraph is exactly why running the result under QEMU on this x86 host
+ * would not have told us anything more.
+ *
+ * Results:
+ *
+ *   x86_64 (native)              — builds clean, 0 assertions fire.
+ *                                   ZC_CACHELINE=64,  sizeof(zc_ctrl_t)=1344.
+ *   aarch64-linux-gnu-gcc        — builds clean, 0 assertions fire.
+ *                                   ZC_CACHELINE=128, sizeof(zc_ctrl_t)=2688
+ *                                   (== 21*128, the same 21-cache-line shape
+ *                                   as x86_64 at the larger line size — see
+ *                                   §12b's formula). Confirmed by reading the
+ *                                   compiler's own .size output for probe
+ *                                   arrays sized ZC_CACHELINE/sizeof(...),
+ *                                   not merely by absence of a compile error.
+ *   riscv64-linux-gnu-gcc,       — builds clean, 0 assertions fire.
+ *     default march (rv64gc,       ZC_CACHELINE=64, sizeof(zc_ctrl_t)=1344.
+ *     i.e. -march=rv64imafdc_      Confirms §12a's finding directly: the
+ *     zicsr_zifencei -mabi=lp64d)  stock distribution toolchain already
+ *                                   includes the base A extension, and
+ *                                   ATOMIC_{INT,LONG,LLONG}_LOCK_FREE all
+ *                                   resolve to 2 under it with no Zacas
+ *                                   involved.
+ *   riscv64-linux-gnu-gcc,       — FAILS as designed, both new assertions:
+ *     -march=rv64imfdc_            ZC_ATOMIC32_LOCK_FREE == 2 and
+ *     zicsr_zifencei (the A         ZC_ATOMIC64_LOCK_FREE == 2 both fire,
+ *     extension explicitly          with the messages quoted in §12a/§12c.
+ *     removed; not a march          Not a real distribution target — every
+ *     any riscv64 Linux             mainstream riscv64 Linux port requires
+ *     distro ships)                 the A extension — constructed solely to
+ *                                   confirm the guard actually catches the
+ *                                   case it exists for, rather than being
+ *                                   dead code that always reads 2.
+ *
+ * The practical reading: on every march this project's declared targets
+ * (aarch64-linux-gnu, riscv64-linux-gnu, x86_64) actually ship by default,
+ * the header compiles unchanged and the ABI locks in at the architecture-
+ * appropriate cache-line size. The lock-freedom assertions are not
+ * currently load-bearing against any of those three default configurations
+ * — they are load-bearing against a march someone could still pass
+ * explicitly (a stripped-down embedded riscv64 core, for instance), which is
+ * exactly the silent-corruption case §12a exists to turn into a compile
+ * error instead. See STATUS.md "Portability audit" for the same summary.
  */
 #ifndef ZCRING_H
 #define ZCRING_H
@@ -554,7 +721,17 @@ _POSIX_C_SOURCE >= 199309L (or _GNU_SOURCE) before including any header."
 extern "C" {
 #endif
 
+/* Destructive-interference size. Sized to the architecture, not just x86:
+ * aarch64 commonly reports 128-byte coherence granules (Neoverse, Apple
+ * silicon), and padding to 64 there would leave head/tail/futex_word/
+ * gate_cache/each cons[] entry sharing a line with its neighbour on exactly
+ * the platforms most likely to run this as a "does it port" check. See §12.
+ */
+#if defined(__aarch64__)
+#define ZC_CACHELINE 128
+#else
 #define ZC_CACHELINE 64
+#endif
 #define ZC_MAGIC     0x5A43524E47303031ULL /* "ZCRNG001" */
 
 /* Bumped from 1 by Layer 2: zc_ctrl_t gained the consumer registry, the gate
@@ -610,13 +787,25 @@ typedef struct {
 /* One consumer's registration. Each entry occupies a full cache line of its
  * own: N consumers advancing their cursors must not invalidate each other's
  * lines, or fan-out would generate exactly the coherence traffic that the
- * per-consumer-cursor design exists to avoid. */
+ * per-consumer-cursor design exists to avoid.
+ *
+ * _pad is sized from ZC_CACHELINE rather than a literal count (§12b): cursor's
+ * _Alignas(ZC_CACHELINE) forces sizeof(zc_cons_t) up to a multiple of
+ * ZC_CACHELINE regardless of what this array reserves — leaving it at a
+ * literal `[5]` (correct only when ZC_CACHELINE==64) would not break on a
+ * 128-byte-line target, it would just make 64 of those bytes invisible
+ * compiler-inserted tail padding instead of a documented field, which is
+ * exactly the kind of thing a later change to this struct could trip over
+ * without warning. */
+#define ZC_CONS_HEAD_BYTES \
+    (sizeof(uint64_t) /* cursor */ + sizeof(uint32_t) /* state */ + \
+     sizeof(uint32_t) /* pid */    + sizeof(uint64_t) /* joins */)
 typedef struct {
     _Alignas(ZC_CACHELINE) _Atomic uint64_t cursor; /* next position to acquire */
     _Atomic uint32_t state;   /* ZC_CONS_FREE / _CLAIMED / _ACTIVE */
     _Atomic uint32_t pid;     /* owner, for liveness checks in zc_bcast_reap */
     _Atomic uint64_t joins;   /* incremented per join; diagnostics only */
-    uint64_t _pad[5];
+    uint64_t _pad[(ZC_CACHELINE - ZC_CONS_HEAD_BYTES) / sizeof(uint64_t)];
 } zc_cons_t;
 
 /* Shared control block. head and tail sit on their own cache lines: if they
@@ -656,18 +845,87 @@ typedef struct {
     _Alignas(ZC_CACHELINE) zc_cons_t cons[ZC_MAX_CONSUMERS];
 } zc_ctrl_t;
 
-/* The claim in §9 that notification did not disturb the shared layout is
- * checked here rather than asserted in prose. These offsets are what a
- * pre-notification build produced; a change to any of them is an ABI break
- * and must bump ZC_ABI_VERSION. */
-_Static_assert(sizeof(zc_ctrl_t) == 1344, "zc_ctrl_t size changed: bump ZC_ABI_VERSION");
-_Static_assert(offsetof(zc_ctrl_t, head) == 64, "zc_ctrl_t layout changed");
-_Static_assert(offsetof(zc_ctrl_t, tail) == 128, "zc_ctrl_t layout changed");
-_Static_assert(offsetof(zc_ctrl_t, futex_word) == 192, "zc_ctrl_t layout changed");
-_Static_assert(offsetof(zc_ctrl_t, waiters) == 196, "zc_ctrl_t layout changed");
-_Static_assert(offsetof(zc_ctrl_t, wake_ts) == 200, "wake_ts must fit the reserved padding");
-_Static_assert(offsetof(zc_ctrl_t, gate_cache) == 256, "zc_ctrl_t layout changed");
-_Static_assert(offsetof(zc_ctrl_t, cons) == 320, "zc_ctrl_t layout changed");
+/* ===========================================================================
+ * Portability audit static assertions (§12) — full rationale in §12 above.
+ * ===========================================================================
+ *
+ * 12a. Atomic lock-freedom. ZC_ATOMICnn_LOCK_FREE resolves via _Generic to
+ * whichever ATOMIC_*_LOCK_FREE macro actually corresponds to uint32_t/
+ * uint64_t on the compiling target, rather than assuming e.g. "uint64_t is
+ * unsigned long" — that assumption is exactly the kind of thing this audit
+ * exists to not make (true on LP64, false where long is 32 bits). */
+#define ZC_ATOMIC32_LOCK_FREE \
+    _Generic((uint32_t)0, \
+        unsigned int:  ATOMIC_INT_LOCK_FREE, \
+        unsigned long: ATOMIC_LONG_LOCK_FREE)
+#define ZC_ATOMIC64_LOCK_FREE \
+    _Generic((uint64_t)0, \
+        unsigned long:      ATOMIC_LONG_LOCK_FREE, \
+        unsigned long long: ATOMIC_LLONG_LOCK_FREE)
+
+_Static_assert(ZC_ATOMIC32_LOCK_FREE == 2,
+    "_Atomic uint32_t (zc_ctrl_t.futex_word/waiters, zc_cons_t.state/pid) is "
+    "not always-lock-free on this target: libatomic would fall back to a "
+    "per-process address-keyed lock table, and two processes mapping the "
+    "same ring would silently take different locks on it -- corruption with "
+    "no error, not just a slowdown.");
+_Static_assert(ZC_ATOMIC64_LOCK_FREE == 2,
+    "_Atomic uint64_t (zc_slot_t.seq, zc_cons_t.cursor/joins, "
+    "zc_ctrl_t.head/tail/wake_ts/gate_cache) is not always-lock-free on this "
+    "target -- same cross-process corruption hazard as the uint32_t case "
+    "above. Known trigger: an atomics-free march (e.g. riscv64 built without "
+    "the base A extension -- NOT the same as merely lacking Zacas, see "
+    "section 12a above) with no native lock-free CAS, so libatomic supplies "
+    "one with a per-process lock.");
+
+/* 12b. Struct layout. head/tail/futex_word/waiters/wake_ts/gate_cache/cons
+ * are expressed relative to ZC_CACHELINE rather than as the literal offsets
+ * ZC_CACHELINE==64 happens to produce, so a real ABI break (field added,
+ * removed, reordered) still fails loudly on every target while an
+ * architecture's different line size no longer looks like one. The leading
+ * fields (version..map_size) and the two per-struct sizes were previously
+ * unchecked; added here for the same reason — an audit that only re-derives
+ * the numbers it already had is not covering "anything that could shift". */
+_Static_assert(sizeof(zc_slot_t) == 16, "zc_slot_t size changed");
+_Static_assert(offsetof(zc_slot_t, len) == 8, "zc_slot_t layout changed");
+
+_Static_assert(sizeof(zc_cons_t) == ZC_CACHELINE,
+    "zc_cons_t must be exactly one cache line -- check ZC_CONS_HEAD_BYTES against ZC_CACHELINE");
+_Static_assert(offsetof(zc_cons_t, state) == 8, "zc_cons_t layout changed");
+_Static_assert(offsetof(zc_cons_t, pid) == 12, "zc_cons_t layout changed");
+_Static_assert(offsetof(zc_cons_t, joins) == 16, "zc_cons_t layout changed");
+
+_Static_assert(offsetof(zc_ctrl_t, version) == 8, "zc_ctrl_t layout changed");
+_Static_assert(offsetof(zc_ctrl_t, mode) == 12, "zc_ctrl_t layout changed");
+_Static_assert(offsetof(zc_ctrl_t, slot_count) == 16, "zc_ctrl_t layout changed");
+_Static_assert(offsetof(zc_ctrl_t, slot_size) == 20, "zc_ctrl_t layout changed");
+_Static_assert(offsetof(zc_ctrl_t, slots_off) == 24, "zc_ctrl_t layout changed");
+_Static_assert(offsetof(zc_ctrl_t, arena_off) == 32, "zc_ctrl_t layout changed");
+_Static_assert(offsetof(zc_ctrl_t, map_size) == 40, "zc_ctrl_t layout changed");
+
+_Static_assert(offsetof(zc_ctrl_t, head) == ZC_CACHELINE, "zc_ctrl_t layout changed");
+_Static_assert(offsetof(zc_ctrl_t, tail) == 2 * ZC_CACHELINE, "zc_ctrl_t layout changed");
+_Static_assert(offsetof(zc_ctrl_t, futex_word) == 3 * ZC_CACHELINE, "zc_ctrl_t layout changed");
+_Static_assert(offsetof(zc_ctrl_t, waiters) == 3 * ZC_CACHELINE + 4, "zc_ctrl_t layout changed");
+_Static_assert(offsetof(zc_ctrl_t, wake_ts) == 3 * ZC_CACHELINE + 8, "wake_ts must fit the reserved padding");
+_Static_assert(offsetof(zc_ctrl_t, gate_cache) == 4 * ZC_CACHELINE, "zc_ctrl_t layout changed");
+_Static_assert(offsetof(zc_ctrl_t, cons) == 5 * ZC_CACHELINE, "zc_ctrl_t layout changed");
+_Static_assert(sizeof(zc_ctrl_t) == 5 * ZC_CACHELINE + (size_t)ZC_MAX_CONSUMERS * ZC_CACHELINE,
+    "zc_ctrl_t size changed: bump ZC_ABI_VERSION");
+
+/* 12c. The fixed-width types themselves. uintN_t is contractually exactly N
+ * bits with no padding bits whenever it exists at all (C11 7.20.1.1), so
+ * these hold on any conforming implementation that defines the type — stated
+ * explicitly anyway, because an audit that checks only the structs built
+ * *from* these types and never the types themselves has a gap in exactly the
+ * place a silent assumption would hide. Every field in zc_slot_t, zc_cons_t
+ * and zc_ctrl_t is one of these two fixed-width types — no size_t, no plain
+ * long, no pointer, no enum — which is what makes the offset asserts above
+ * sufficient across ILP32 and LP64 both: a size_t or bare `long` member would
+ * need its own per-data-model assert, because unlike uintN_t those are
+ * permitted to change size across data models. */
+_Static_assert(sizeof(uint32_t) == 4, "uint32_t is not 4 bytes on this target");
+_Static_assert(sizeof(uint64_t) == 8, "uint64_t is not 8 bytes on this target");
 
 /* Per-process handle. Never shared; each process attaches its own. */
 typedef struct {
