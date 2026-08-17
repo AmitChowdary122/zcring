@@ -4,7 +4,7 @@ LDFLAGS ?= -pthread
 
 BUILD := build
 
-.PHONY: all clean test sweep fanout tsan demo
+.PHONY: all clean test sweep fanout tsan demo adaptive-trace
 
 all: $(BUILD)/bench $(BUILD)/test_zcring
 
@@ -21,6 +21,9 @@ $(BUILD)/test_zcring: tests/test_zcring.c $(BUILD)/zcring.o | $(BUILD)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(BUILD)/pipeline: demo/pipeline.c $(BUILD)/zcring.o | $(BUILD)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BUILD)/adaptive_trace: bench/adaptive_trace.c $(BUILD)/zcring.o | $(BUILD)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 # Thread-sanitised build. Memory-ordering bugs in a lock-free ring are the
@@ -44,6 +47,9 @@ fanout: $(BUILD)/bench
 
 demo: $(BUILD)/pipeline
 	@./scripts/demo.sh
+
+adaptive-trace: $(BUILD)/adaptive_trace
+	@./scripts/adaptive_trace.sh
 
 # results/ is deliberately NOT removed. Benchmark CSVs are committed evidence
 # that can cost an hour of quiet-machine time to regenerate, and a routine
