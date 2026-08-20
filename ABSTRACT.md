@@ -1,4 +1,23 @@
-# Abstract — submission draft
+> ## ⚠ SUPERSEDED — do not copy from this file
+>
+> **Use `docs/STAGE1_SUBMISSION.md` for the submission form.**
+>
+> This file predates several retractions and still contains numbers that are
+> no longer defensible:
+>
+> - **"2.03× at N=4"** (lines below) was measured under `--yield`, a flag that
+>   no longer exists. The current notify-mode figure is **1.24×**, and growth
+>   past N=2 is deliberately not claimed at all.
+> - **"19.6×"** is quoted as a point estimate; the defensible claim is the
+>   **18–20×** range, because the suite was re-measured and the comparators
+>   moved 5–12%.
+> - The fan-out table as a whole cannot share a page with notify-mode numbers.
+>
+> Kept, not deleted, because the retraction history is itself evidence of the
+> measurement discipline this project claims. See `STATUS.md` and
+> `results/PROVENANCE.md`.
+
+# Abstract — superseded draft (7 Aug)
 
 Track 1 (Core) · *Zero-Copy Shared-Memory IPC Framework for Embedded Linux*
 

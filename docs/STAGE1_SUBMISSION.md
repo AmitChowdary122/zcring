@@ -1,0 +1,258 @@
+# Stage 1 submission form — field text
+
+**Written fresh from `results/*.csv` and README.md's authoritative tables on
+17 Aug 2026. Do NOT copy from `ABSTRACT.md`** — that file predates several
+retractions and still contains `2.03× at N=4` (the true notify-mode figure is
+1.24×) and `19.6×` as a point estimate where the defensible claim is a range.
+
+Every number below traces to committed raw data. Provenance caveats are in
+`results/PROVENANCE.md`.
+
+---
+
+## Title
+
+> **zcring — Deterministic Zero-Copy Shared-Memory IPC for Embedded Linux**
+
+*Alternate, if a subtitle field exists:* "A lock-free shared-memory transport
+with an online-learned wake policy."
+
+---
+
+## Problem Statement
+
+*(fixed by the organisers — reproduce verbatim)*
+
+> Zero-Copy Shared-Memory IPC Framework for Embedded Linux — Develop a
+> zero-copy shared-memory IPC framework for Embedded Linux to reduce latency,
+> eliminate unnecessary memory copies, and provide deterministic,
+> high-performance communication for real-time embedded applications.
+
+---
+
+## Objective
+
+> To build and measure a shared-memory IPC transport for embedded Linux in
+> which application messages are constructed and read **in place**, so that no
+> copy of the payload is made anywhere in the data path and no system call is
+> issued per message.
+>
+> The target property is **determinism, not peak throughput**: real-time
+> embedded workloads are constrained by worst-case latency rather than by
+> average latency, so the objective is a transport whose tail behaviour is
+> bounded and explainable, on hardware representative of embedded deployment
+> (2–4 cores), with every claim traceable to committed raw measurement data.
+
+---
+
+## Description
+
+> A camera on an embedded device produces frames that several processes must
+> each read — one detects edges, one checksums, one tracks timing. Over a
+> UNIX socket the frame is copied into the kernel and out again *for every
+> consumer*. zcring publishes it once and all consumers read the same bytes.
+> The committed demo runs exactly this pipeline over both transports:
+> 1800 frames, three consumers, zero drops, **3.09 GB of memory traffic
+> avoided** in sixty seconds.
+>
+> **Mechanism.** zcring is a lock-free multi-producer/multi-consumer ring
+> (Vyukov sequence scheme, C11 acquire/release, cache-line padded) over a
+> `memfd_create` + `mmap(MAP_SHARED)` region. `reserve`/`commit` on the
+> producer and `acquire`/`release` on the consumer return **raw pointers into
+> shared memory**, so the application constructs and reads the message in
+> place. There is no `memcpy` in the data path: a pipe's four passes over the
+> payload become two, and the per-message system call disappears entirely.
+>
+> **Measured** on bare-metal Ubuntu, Intel i3-1115G4 (dual-core with SMT —
+> deliberately embedded-class hardware), `--touch` mode so both sides
+> genuinely write and read every payload byte, producer and consumer pinned to
+> distinct physical cores, mean of 5 repetitions:
+>
+> | payload | zcring p50 | best comparator | ratio |
+> |---|---|---|---|
+> | 64 B | 114 ns | 2.2 µs (pipe) | **18–20×** |
+> | 1 KiB | 233 ns | 2.3 µs (pipe) | 10.0× |
+> | 4 KiB | 749 ns | 2.7 µs (pipe) | 3.66× |
+> | 1 MiB | 183 µs | 153 µs (UNIX socket) | 0.84× |
+>
+> **Two limitations are stated here rather than left to be discovered.**
+> First, the small-message figures are *dedicated-core* numbers: the consumer
+> spins. If it blocks instead, the system call returns to the data path and
+> 64 B falls to parity (0.93×). Real-time control loops, software radio and
+> industrial controllers routinely dedicate a core, and the framework supports
+> both postures — but the number must be quoted with its posture. Second, at
+> 256 KiB and above a single-consumer transfer is *slower* than a UNIX socket
+> (0.68–0.84×). Four hypotheses were tested against that gap — offered rate,
+> thermal state, busy-spin power draw, and TLB pressure via huge pages — and
+> all four were negative; the remaining candidates are platform power
+> behaviour rather than properties of this code.
+>
+> **Scalability** recovers the large-payload case. Publication costs one
+> release store regardless of consumer count, while copying transports pay N
+> copies in and N out. At 1 MiB the crossover is at **N=2 (1.36×)**. Growth
+> beyond that is deliberately *not* claimed: in broadcast mode every consumer
+> runs on every message, so consumer count is bounded by core count on any
+> platform, and one producer plus four consumers oversubscribes a four-core
+> embedded target exactly as it does the measurement machine.
+>
+> **Determinism.** Tail latency was traced to a concrete hardware cause —
+> deep CPU idle-state exit latency, measured at 1048 µs on this part — and
+> eliminated. With deep C-states disabled, p99.9 falls to 1.04 µs and, more
+> importantly, its *variance collapses*: before, p99.9 depended on whether the
+> idle governor happened to choose C3 during that run. The effect has since
+> been confirmed cross-vendor on AMD (350 µs C3 exit), so it is a property of
+> the platform class rather than an Intel quirk.
+>
+> **Correctness and reproducibility.** Exactly-once delivery is verified
+> across 4 producers × 4 consumers over 200,000 messages and across process
+> boundaries; ThreadSanitizer runs clean on both x86 microarchitectures
+> tested. The entire benchmark suite was **re-measured on a separate occasion
+> from a clean boot** and reproduced within 1.5%. All raw CSVs, the harness,
+> and the analysis scripts are committed. Three measurement artifacts found
+> during development — a harness that never touched the payload, SMT-sibling
+> pinning, and thermal throttling — are documented alongside the results
+> rather than omitted, as are several claims that were measured, retracted and
+> corrected.
+
+---
+
+## Novelty
+
+> **1. The wake threshold is learned online rather than configured.** Every
+> shared-memory transport must decide how long a waiting consumer spins before
+> blocking. That value is normally a compiled-in constant, which is a guess
+> about a distribution the framework cannot know at build time. zcring learns
+> it per consumer from the observed inter-arrival distribution, as a
+> constrained optimisation — minimise wake latency subject to a CPU budget —
+> using a Robbins–Monro quantile update, a ski-rental 2-competitive floor
+> derived from the *measured* wake cost, ε-greedy exploration, and
+> de-biasing of censored samples via a producer-side timestamp. The full
+> derivation is in `src/zcring.h` §§5–10 and the policy is shown tracking a
+> mid-run distribution shift in `docs/adaptive_trace.pdf`.
+>
+> **2. Kernel-enforced arbitration, and why it is not iceoryx.** Existing
+> zero-copy frameworks are pure userspace: every participant maps the segment
+> read-write because the ring's own bookkeeping requires it, so a buggy or
+> malicious peer can corrupt every other peer. A broker daemon can decide who
+> *attaches*; it cannot revoke a page the MMU has already been told is
+> writable. Only the kernel can hand out a mapping that is physically unable
+> to write. `docs/LAYER3_DESIGN.md` specifies that layer — misc device,
+> per-role `mmap` protections, threat model, phased scope. **It is designed
+> and specified, not built**, and is presented as such.
+>
+> **3. The security property comes from the topology, not from shared
+> memory.** Full write-protection is possible in broadcast mode and impossible
+> in unicast MPMC: a broadcast consumer only advances its own cursor and never
+> mutates shared state, whereas a unicast consumer must write slot sequence
+> numbers to release slots. One-writer-many-readers is therefore what *makes*
+> kernel-enforced isolation possible. This ties the security layer to the
+> fan-out design rather than bolting it on, and it bounds the claim honestly.
+
+---
+
+## Innovation
+
+> **True in-place construction.** The API hands the application raw pointers
+> into shared memory rather than copying into a staging buffer — genuinely
+> zero-copy rather than one-copy renamed. The proof obligation is met by
+> benchmarking in `--touch` mode, where both sides write and read every
+> payload byte; without it the harness moves only an 8-byte header and
+> produces a flat latency curve that is an artifact rather than a result.
+> That trap was hit, diagnosed and permanently closed in the harness.
+>
+> **A hardware cause found for a software-looking problem.** Tail latency was
+> not smoothed away or averaged out; it was traced to CPU idle-state exit
+> latency, quantified per state from `sysfs`, eliminated, and then confirmed
+> on a second vendor. The determinism claim rests on an identified mechanism.
+>
+> **Portability treated as a correctness property, not a build concern.**
+> Every `_Atomic` field in the shared control block is statically asserted
+> always-lock-free. If any were not, the compiler would fall back to
+> libatomic's lock table — which is keyed by address and is **per-process** —
+> so two processes mapping the same ring would serialise against two locks
+> that know nothing about each other. That is not a slower ring but an
+> unsynchronised one, and no single-process sanitiser run would catch it. The
+> cache-line constant is likewise architecture-aware, since aarch64 commonly
+> reports 128-byte coherence granules where a hardcoded 64 would silently
+> reintroduce false sharing between consumer cursors.
+>
+> **Measurement discipline as a deliverable.** Benchmarks run at a stated,
+> sensitivity-tested offered rate rather than an incidental one; scripts
+> refuse to write a canonical dataset filename on a CPU other than the one the
+> committed data came from; raw CSVs are committed alongside the code; and
+> claims that did not survive re-measurement were retracted in place with the
+> reason recorded rather than quietly replaced.
+
+---
+
+## Tech Stack
+
+> **Language:** C11 (`-Wall -Wextra`, warning-free), no third-party runtime
+> dependencies.
+> **Kernel interfaces:** `memfd_create`, `mmap(MAP_SHARED)`, `futex`,
+> `MFD_HUGETLB` / `MADV_HUGEPAGE`, `sched_setaffinity`, `sysfs` cpuidle and
+> CPU-topology interfaces.
+> **Concurrency:** C11 `<stdatomic.h>` acquire/release ordering; Vyukov
+> bounded MPMC queue; cache-line padding via `_Alignas`.
+> **Verification:** ThreadSanitizer, a 919-line test suite (exactly-once under
+> 4×4 contention, cross-process, notification races, huge-page fallback),
+> static layout and lock-freedom assertions.
+> **Benchmarking & tooling:** GNU Make, Bash, Python 3 (matplotlib) for
+> figures generated from committed CSVs; `cpupower`, `perf`.
+> **Comparators:** `pipe(2)` and AF_UNIX sockets, implemented in the harness.
+> Third-party frameworks are referenced only as prior art, never incorporated.
+> **Platforms:** x86-64 (Intel Tiger Lake, AMD Zen); cross-compiled clean for
+> aarch64 and riscv64.
+
+---
+
+## Model Type
+
+> **Inbuilt Model**
+
+*Justification, if a free-text field accompanies it:*
+
+> An in-house, purpose-built online-learned policy rather than a pre-trained
+> or third-party model. The spin-then-block threshold is estimated at runtime
+> from the observed inter-arrival distribution by a constrained optimisation
+> with a measured objective, a ski-rental competitive floor and ε-greedy
+> exploration. It is load-bearing rather than decorative: the framework
+> genuinely requires this parameter, a fixed value is demonstrably wrong in
+> both directions when the arrival process shifts, and the derivation is in
+> the source header. No external dataset or pre-trained model is used.
+
+---
+
+## Data Set Used
+
+> Not applicable. No external dataset is used. The adaptive policy learns
+> online from runtime inter-arrival measurements taken by the consumer itself.
+> All benchmark data is generated by the committed harness (`bench/bench.c`,
+> `scripts/`) and the raw CSVs are committed under `results/` with provenance
+> recorded in `results/PROVENANCE.md`.
+
+---
+
+## GitHub Link
+
+> `https://github.com/AmitChowdary122/zcring`
+
+**Must be public before submitting.** Untrack the working vault first:
+`git rm -r --cached vault/`, re-add `vault/` to `.gitignore`, commit.
+
+---
+
+## Notes for whoever fills the form
+
+- **Say "dual-core with SMT", never "quad-core".** `nproc` reports 4 on the
+  measurement machine; `lscpu` shows 2 cores per socket.
+- **Never quote a small-message ratio without its waiter posture.** 18–20× is
+  spin/dedicated-core; blocking is 0.93×.
+- **State the large-payload loss before anyone asks.** It is disclosed in the
+  Description above deliberately and should stay there.
+- **Do not claim fan-out growth past N=2.**
+- **Do not present Layer 3 as built.** It is designed and specified.
+- If a field has a hard character limit, cut from the Description's
+  measurement tables first — they are reproduced in the deck and README — and
+  keep the camera-pipeline opening, which is the part a non-specialist
+  understands immediately.
