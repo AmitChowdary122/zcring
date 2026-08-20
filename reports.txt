@@ -10,7 +10,7 @@ Commit:  b94051e
 -----------------------------
 
 - This machine is an i3-1115G4: 2 PHYSICAL CORES / 4 THREADS (SMT), not a
-  true 4-core part as CLAUDE.md assumes. `nproc` reports 4, but `lscpu`
+  true 4-core part as CONTEXT.md assumes. `nproc` reports 4, but `lscpu`
   shows "Core(s) per socket: 2". The sweep's pinning is still correct
   (cpu2/cpu3 map to distinct physical cores, verified via core_id), but the
   "4 cores, embedded-representative" framing in the abstract should say
@@ -180,7 +180,7 @@ p99.9 latency (min - mean - max across 5 reps):
     1.18 ms across 5 reps at the SAME config. All three transports show
     this, so it is not a ring defect; it is OS scheduling noise on a
     non-isolated, non-RT kernel. This is exactly the gap PLAN.md section 5
-    flags (isolcpus / nohz_full / PREEMPT_RT — item 4 in CLAUDE.md's
+    flags (isolcpus / nohz_full / PREEMPT_RT — item 4 in CONTEXT.md's
     next-tasks list). Do not quote p99.9 until that work is done.
 
 
@@ -201,7 +201,7 @@ just the tail:
     1 MiB      pipe        969.55 us       334.55 us       2.9x
 
 The WSL2 zcring column is not comparable at all: that run predates
---touch and shows the harness artifact CLAUDE.md warns about — a flat
+--touch and shows the harness artifact CONTEXT.md warns about — a flat
 ~90 ns p50 at every payload size including 1 MiB, which is not physically
 possible. It is an artifact, not a measurement.
 
@@ -450,7 +450,7 @@ defensible; the N=4 absolute numbers are a property of the measurement box
 and must be presented as such.
 
 If a stronger scalability claim is wanted, it needs a machine with more
-physical cores — and per CLAUDE.md the WSL2 Ryzen is not a valid measurement
+physical cores — and per CONTEXT.md the WSL2 Ryzen is not a valid measurement
 platform, so that would mean new hardware, not the existing dev box.
 
 
@@ -499,7 +499,7 @@ p99.9 remains not quotable pending that work.
 ---------
 
 Layer 2 fan-out: complete, tested, TSan-clean, data committed.
-Next per CLAUDE.md: adaptive spin-then-futex notification — which is also
+Next per CONTEXT.md: adaptive spin-then-futex notification — which is also
 what removes the --yield stopgap and makes idle CPU cost comparable between
 zcring and the blocking comparators.
 
@@ -646,7 +646,7 @@ the sizes that matter most for the large-payload story. zcring degrades
 much more than unix under heat (~70% vs ~0-20%) because its consumer
 busy-spins the whole gap, generating its own heat, where unix blocks in
 read() and doesn't. This is a second, independent cost of the missing
-adaptive-notification work (STATUS.md next-steps item 4/CLAUDE.md item 1),
+adaptive-notification work (STATUS.md next-steps item 4/CONTEXT.md item 1),
 beyond the already-documented idle-CPU-fairness one.
 
 This likely also explains part of the ORIGINAL three-way 1.47x/1.38x/2.32x
@@ -797,7 +797,7 @@ choice of primary rate to headline.
 Wrote the sensitivity table into README.md's "Offered rate" section, then
 did a full top-to-bottom read of README.md to check the rewrite reads as
 one coherent document rather than patched-in sections. Also updated
-CLAUDE.md's "Claims that are defensible" block, which still had the old
+CONTEXT.md's "Claims that are defensible" block, which still had the old
 18.8x/1.1-1.5x numbers and would have misled a fresh session reading it
 first -- brought it in line with README.md's corrected claims, using the
 same "two earlier versions of this claim were wrong, here's why" pattern
@@ -1326,7 +1326,7 @@ existing statements became false rather than merely incomplete:
                    buried, because quoting that data next to a notify number
                    is the most likely way for a future session to get this
                    wrong.
-    CLAUDE.md      AI/ML criterion now has an answer; next-tasks reordered;
+    CONTEXT.md      AI/ML criterion now has an answer; next-tasks reordered;
                    the superseded "pipe/unix are not affected by the C-state
                    setting" sub-claim marked as such.
     RUNNING.md     --yield references replaced; the thermal section's

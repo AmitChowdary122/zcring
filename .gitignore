@@ -12,7 +12,7 @@ perf.data*
 # scratch previews from docs/deck.py rendering — never committed
 .deckpreview/
 
-# Claude's working-memory vault: an index over this repo's own memory
+# Private working-memory vault: an index over this repo's own memory
 # (STATUS.md, reports.txt, README.md), not a source of truth.
 #
 # It IS committed, deliberately — as of 14 Aug the Ubuntu SSD dual-boots in
@@ -25,3 +25,6 @@ perf.data*
 # The files stay on disk; the working tree stops showing them. See
 # vault/00-how-i-use-this.md.
 vault/
+
+# local tooling stub, not part of the project
+CLAUDE.md

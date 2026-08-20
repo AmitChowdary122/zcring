@@ -1,4 +1,4 @@
-# CLAUDE.md — project context
+# CONTEXT.md — project context
 
 **Read `HACKATHON.md` first — it holds the official rules, the real submission
 form, and the actual evaluation rubric, and it outranks every other file

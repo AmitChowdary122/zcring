@@ -1,7 +1,7 @@
 # HACKATHON.md — the official rules and requirements
 
 **This file outranks everything else in the repo.** `PLAN.md`, `README.md`,
-and `CLAUDE.md` describe how we intend to win; this file describes what we are
+and `CONTEXT.md` describe how we intend to win; this file describes what we are
 actually being asked for and judged on. Where they disagree, this wins.
 
 Captured 7 Aug 2026 from the organiser's submission page. These do not change.

@@ -1,6 +1,6 @@
 # STATUS — session handoff
 
-Last updated: **14 Aug 2026**. Read this after `CLAUDE.md` and before doing
+Last updated: **14 Aug 2026**. Read this after `CONTEXT.md` and before doing
 anything. It records decisions and open problems that exist nowhere in the
 code, and that a fresh session will otherwise get wrong.
 
