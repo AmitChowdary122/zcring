@@ -22,7 +22,8 @@ performance governor, producer and consumer pinned to distinct physical cores,
 | `sweep_layer1_historical.csv` | i3 | `847bee2`, 1 Aug | historical — not reproducible from this tree |
 | `sweep_verify_layer1_historical.csv` | i3 | pre-Layer-2, 7 Aug | historical |
 | `sweep_ryzen.csv` | Ryzen | HEAD, 20 Aug | secondary, labelled |
-| `fanout_notify.csv` | i3 | 8 Aug | **pre-dates huge pages + portability audit** |
+| `fanout.csv` | i3 (revived) | **HEAD, 20 Aug** | **canonical** |
+| `fanout_notify_aug8_historical.csv` | i3 | 8 Aug | historical — pre-dates huge pages + portability audit |
 | `fanout_yield_historical.csv` | i3 | measured under `--yield`, removed | historical |
 | `cstate_*.csv`, `hugepage_ab.csv`, `tail_1mib.csv`, `sweep_rate{10,50}.csv` | i3 | various | supporting studies |
 | `ryzen_bringup.txt` | Ryzen | 17 Aug | bring-up log |

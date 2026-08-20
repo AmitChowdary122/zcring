@@ -92,8 +92,8 @@ In short: 64 B is 16.8× vs pipe on the shipped code (reproduced across two
 independent measurement sessions), large payloads (256 KiB–1 MiB) lose to a
 UNIX socket at N=1 under the C-state-disabled configuration the determinism
 claim requires (disclosed trade-off, see README's "Why large payloads lose
-here"), and fan-out wins that back from N=2 on (0.82× → 1.36× at 1 MiB,
-`results/fanout_notify.csv`) — do not claim growth past N=2, see README's
+here"), and fan-out wins that back from N=2 on (0.82× → 1.37× at 1 MiB,
+`results/fanout.csv`) — do not claim growth past N=2, see README's
 fan-out section for why. p99.9 is quotable at N=1 with deep C-states
 disabled (1.04 µs mean); p99.99 is not yet.
 

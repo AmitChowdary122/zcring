@@ -38,10 +38,18 @@ what the committed code produces. Recovering those 16 ns is open work and the
 layout change is the obvious suspect; deliberately not chased before the
 deadline.
 
-**`results/fanout_notify.csv` is still 8 Aug** — after adaptive notification
-but before huge pages and the portability audit. The N=2 crossover rests on
-it. Re-running fan-out against HEAD is the highest-value measurement
-outstanding.
+**Fan-out was re-run against HEAD on 20 Aug and is unchanged.**
+`results/fanout.csv` is canonical; the 8 Aug data is preserved as
+`fanout_notify_aug8_historical.csv`. At 1 MiB: 0.82× / **1.37×** / 1.25×
+against 0.82 / 1.36 / 1.24 — every point across the whole matrix within noise.
+That is expected in hindsight: fan-out is measured under `--notify`, where a
+~2 µs syscall dominates, so a 16 ns fixed overhead is invisible. The
+regression only ever showed at 64 B under the spin waiter, where 130 ns *is*
+the measurement.
+
+**Both canonical datasets are now current. `src/zcring.h` and `src/zcring.c`
+are frozen** — any change to the ring invalidates every dataset, which is
+exactly how the sweep went stale by 16 ns without anyone noticing.
 
 `scripts/lib.sh:check_machine()` refuses to write a canonical dataset filename
 on a non-i3 CPU. It passes on the revived i3, so **`OUT_SUFFIX` discipline is
@@ -108,10 +116,11 @@ quiesced re-run before it is worth anything.
   full brief: threat model, architecture, phasing, decision gate. **Read it
   before writing a line of kernel code.** Chosen as the next build item on
   14 Aug over the Stage 1 form text. See "Layer 3" below.
-- **Stage 1 artifacts**: architecture diagram ✅ (254 KB), deck ✅ (85 KB,
-  11 slides). **Form text ❌ not started. Demo video ❌ not started. Repo
-  still private ❌.** These three are what stand between the project and a
-  submitted entry — see `HACKATHON.md` for the field list.
+- **Stage 1 artifacts**: architecture diagram ✅ (256 KB), deck ✅ (84 KB,
+  11 slides), form text ✅ (`docs/STAGE1_SUBMISSION.md` — every field drafted,
+  requoted against the 20 Aug canonical data), **repo public ✅**.
+  **Demo video ❌ — the last remaining gate.** Deadline verified from the
+  portal: **~25 Aug 00:00 IST**, midnight ending 24 Aug.
 - **Not started**: `eventfd`/`epoll` bridge, crash recovery for producers,
   determinism rigor (isolcpus / nohz_full / PREEMPT_RT), iceoryx and ZeroMQ
   comparators.
@@ -763,7 +772,7 @@ to be reserved when they run. Full writeup: `reports.txt` §29.
    "Adaptive notification" above. It also settled the busy-spin hypothesis
    (Open problem #5, follow-up 2): negative, conclusively.
 4. ~~**Regenerate the fan-out sweep under `--notify`.**~~ **Done**, 8 Aug —
-   `results/fanout_notify.csv`, with the `--yield` data preserved as
+   `results/fanout_notify_aug8_historical.csv`, with the `--yield` data preserved as
    `results/fanout_yield_historical.csv`. It narrowed the crossover claim to
    N=2 and showed notification does *not* remove the N=4 artifact: it
    replaces spinner thrash with a wake storm. See the fan-out note above.
@@ -832,7 +841,7 @@ configuration the small-message determinism claim requires (see README.md
 > publication is O(1) in N and copying transports are O(N). Do *not* claim
 > "grows with N" past N=2 without the bigger machine. Datasets:
 > `results/fanout_yield_historical.csv` (historical, not reproducible) and
-> `results/fanout_notify.csv` (current, regenerates from this tree). Full
+> `results/fanout.csv` (current, regenerates from this tree). Full
 > analysis in README.md's "The same sweep under `--notify`".
 
 Then show the fan-out crossover, which is the more interesting scalability

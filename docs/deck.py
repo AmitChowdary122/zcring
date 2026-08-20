@@ -27,7 +27,7 @@ def load(path, key, col="p50_ns"):
 
 sweep  = load("results/sweep.csv", ["transport", "size"])
 fan_y  = load("results/fanout_yield_historical.csv", ["transport","consumers","size"])
-fan_n  = load("results/fanout_notify.csv", ["transport","consumers","size"])
+fan_n  = load("results/fanout.csv", ["transport","consumers","size"])
 
 def slide(pdf, title, kicker=None):
     fig = plt.figure(figsize=(W, H)); fig.patch.set_facecolor("white")
@@ -201,7 +201,7 @@ axc.legend(fontsize=11, frameon=False); axc.tick_params(labelsize=10, colors=MUT
 for sp in ("top","right"): axc.spines[sp].set_visible(False)
 for sp in ("left","bottom"): axc.spines[sp].set_color("#d5d9e0")
 ax.text(60, 66, "1 MiB payload, adaptive notify", fontsize=13, color=MUTED)
-for i,(n,v,c) in enumerate([("N = 1","0.82×",WARN),("N = 2","1.36×",ZC),("N = 4","1.24×",FAINT)]):
+for i,(n,v,c) in enumerate([("N = 1","0.82x",WARN),("N = 2","1.37x",ZC),("N = 4","1.25x",FAINT)]):
     ax.text(60, 59 - i*7, n, fontsize=14, color=MUTED, va="center")
     ax.text(74, 59 - i*7, v, fontsize=17, color=c, fontweight="bold", va="center")
 ax.text(60, 30, "zcring loses at one consumer and wins\nfrom two onward. The crossover is the\nresult — not a flat multiplier.",

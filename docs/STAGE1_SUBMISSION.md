@@ -138,7 +138,7 @@ with an online-learned wake policy."
 >
 > **Scalability** recovers the large-payload case. Publication costs one
 > release store regardless of consumer count, while copying transports pay N
-> copies in and N out. At 1 MiB the crossover is at **N=2 (1.36×)**. Growth
+> copies in and N out. At 1 MiB the crossover is at **N=2 (1.37×)**. Growth
 > beyond that is deliberately *not* claimed: in broadcast mode every consumer
 > runs on every message, so consumer count is bounded by core count on any
 > platform, and one producer plus four consumers oversubscribes a four-core

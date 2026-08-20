@@ -509,22 +509,22 @@ above, `--touch --yield`, mean of 5 reps. Raw data in `results/fanout.csv`.
 
 ### The same sweep under `--notify` — reproducible, and weaker
 
-`results/fanout_notify.csv`, REPS=5, identical configuration except that the
+`results/fanout.csv`, REPS=5, identical configuration except that the
 consumer uses the adaptive spin-then-futex waiter instead of the removed
 `--yield` stopgap. **This is the table that regenerates from the current
 tree.**
 
-| payload | N | zcring | pipe | unix | vs. best | (was, `--yield`) |
-|---|---|---|---|---|---|---|
-| 64 B | 1 | 2.3 µs | 2.2 µs | 3.1 µs | 0.93× | 18.3× |
-| 64 B | 2 | 3.0 µs | 3.1 µs | 4.3 µs | 1.04× | 27.1× |
-| 64 B | 4 | 12.3 µs | 5.5 µs | 6.4 µs | 0.45× | 5.5× |
-| 4 KiB | 1 | 2.9 µs | 2.7 µs | 4.2 µs | 0.94× | 3.30× |
-| 4 KiB | 2 | 3.5 µs | 3.7 µs | 5.6 µs | 1.07× | 5.08× |
-| 4 KiB | 4 | 12.7 µs | 6.2 µs | 8.2 µs | 0.49× | 3.86× |
-| 1 MiB | 1 | 188 µs | 351 µs | 154 µs | 0.82× | 0.82× |
-| 1 MiB | 2 | 188 µs | 635 µs | 256 µs | **1.36×** | 1.38× |
-| 1 MiB | 4 | 337 µs | 986 µs | 417 µs | 1.24× | 2.03× |
+| payload | N | zcring | pipe | unix | vs. best |
+|---|---|---|---|---|---|
+| 64 B | 1 | 2.4 µs | 2.2 µs | 3.2 µs | 0.91× |
+| 64 B | 2 | 3.0 µs | 3.1 µs | 4.3 µs | 1.03× |
+| 64 B | 4 | 12.2 µs | 5.5 µs | 6.5 µs | 0.45× |
+| 4 KiB | 1 | 3.0 µs | 2.7 µs | 4.2 µs | 0.92× |
+| 4 KiB | 2 | 3.6 µs | 3.8 µs | 5.6 µs | 1.04× |
+| 4 KiB | 4 | 13.1 µs | 6.3 µs | 8.3 µs | 0.48× |
+| 1 MiB | 1 | 189 µs | 358 µs | 155 µs | 0.82× |
+| 1 MiB | 2 | 189 µs | 642 µs | 259 µs | **1.37×** |
+| 1 MiB | 4 | 333 µs | 1005 µs | 416 µs | 1.25× |
 
 Three separate things are happening here and they must not be blurred.
 
@@ -539,8 +539,7 @@ dedicated-core number** — which real-time embedded deployments routinely
 provide, and which must be stated rather than assumed.
 
 **The copy advantage survives blocking, which is the important part.** At
-1 MiB, N=1 and N=2 are unchanged to within noise (0.82× and 1.36× against
-0.82× and 1.38×). Blocking costs a syscall; it does not reintroduce a copy.
+1 MiB, N=1 and N=2 are unchanged to within noise (0.82× and 1.37×). Blocking costs a syscall; it does not reintroduce a copy.
 The crossover — lose at N=1, win from N=2 — is intact and now reproducible.
 
 **N=4 is a wake storm, and it is the two-core ceiling again.** 64 B at N=4
