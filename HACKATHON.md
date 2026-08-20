@@ -36,6 +36,14 @@ scalability, **quality of AI integration**, implementation quality, and impact.
 **Stage 3 — Prize Distribution.** Winners announced; certificates and prizes,
 with possible mentorship, incubation support or pilot engagement with C-DAC.
 
+## Deadline — verified from the portal
+
+**Stage 1 closes ~25 Aug 2026, 00:00 IST** — i.e. midnight at the end of
+24 Aug. Confirmed 20 Aug from the portal countdown (98 hours remaining).
+Earlier notes in this repo said "~23–24 Aug", inferred from a 400-hour
+countdown seen on 7 Aug; that inference was a day pessimistic. **This line is
+the authority.** Re-check the countdown before relying on it again.
+
 ## Stage 1 submission form — every required field
 
 | Field | Required | Status |
