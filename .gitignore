@@ -25,6 +25,3 @@ perf.data*
 # The files stay on disk; the working tree stops showing them. See
 # vault/00-how-i-use-this.md.
 vault/
-
-# local tooling stub, not part of the project
-CLAUDE.md

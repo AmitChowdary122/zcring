@@ -8,8 +8,8 @@ the benchmark methodology, `RUNNING.md` the operational detail.
 
 ## How this project is worked
 
-Built with AI-assisted development: a planning session drafts scope and
-instructions, Claude Code builds and measures against them. `STATUS.md` is
+Work is split between a planning pass that drafts scope and instructions and
+an implementation pass that builds and measures against them. `STATUS.md` is
 the authoritative build/measurement state and the handoff point between
 sessions — read it first. `vault/` is a local working-memory notebook; it is
 gitignored and not part of this repo's public history.
