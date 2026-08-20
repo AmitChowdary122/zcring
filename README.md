@@ -444,7 +444,7 @@ above, `--touch --yield`, mean of 5 reps. Raw data in `results/fanout.csv`.
 > it is the dataset the fan-out crossover claim was made from and deleting it
 > would leave that claim unsupported, but it must be **regenerated before it is
 > quoted alongside any notify-mode number**, and the two must not be mixed in
-> one table. Provenance: commit `08a8aa3` (primary), `73b8054` (verification
+> one table. Provenance: commit `08a8aa3` (primary), `212cd6d` (verification
 > re-run).
 
 | payload | N | zcring | pipe | unix | zcring vs. best comparator |

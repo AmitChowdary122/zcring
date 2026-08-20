@@ -1039,9 +1039,9 @@ before pushing.
 
 Final state: two commits this session, both pushed --
 
-    7f93921  Add camera fan-out demo (make demo): live zcring vs
+    4667ba5  Add camera fan-out demo (make demo): live zcring vs
              unix-socket comparison
-    6403e07  Merge branch 'main' of .../zcring (brings in the other
+    b85aeab  Merge branch 'main' of .../zcring (brings in the other
              session's ABSTRACT.md)
 
 `make demo` (60s default) and `DURATION=600 [TRANSPORT=unix] make demo`
@@ -1049,7 +1049,7 @@ are both real, both tested at the durations they claim to support.
 
 This item-25 writeup itself committed and pushed as:
 
-    5c16ebd  reports.txt: record the camera fan-out demo session
+    9db8531  reports.txt: record the camera fan-out demo session
 
 
 26. Layer 2 adaptive notification: online-learned spin-then-futex threshold,
@@ -1341,9 +1341,9 @@ existing statements became false rather than merely incomplete:
 Commits this session (both local at time of writing, pushed immediately
 after this item):
 
-    ef1832e  Layer 2: adaptive spin-then-futex notification with an
+    7bee078  Layer 2: adaptive spin-then-futex notification with an
              online-learned budget                          (item 26)
-    b884071  C-state A/B re-run with a real block/wake cycle: busy-spin
+    5ee9076  C-state A/B re-run with a real block/wake cycle: busy-spin
              hypothesis refuted                             (item 27)
 
 Split deliberately rather than committed as one: the A/B is a quotable
