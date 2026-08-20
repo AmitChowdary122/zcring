@@ -1,0 +1,415 @@
+zcring waiter: spin
+pinning: producer cpu=0 (physical core 0), consumer cpu=1 (physical core 1)
+
+=========================================================
+ MACHINE MISMATCH
+   committed datasets: Intel(R) Core(TM) i3-1115G4
+   this machine:       AMD Ryzen 9 270 w/ Radeon 780M Graphics
+=========================================================
+OUT_SUFFIX is set, writing 'results/sweep_ryzen.csv' -- record the CPU in
+results/PROVENANCE.md or this file becomes unattributable.
+
+rate fraction: 25% of saturation
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=64       n=20000   gap=100    rep=1
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=64       n=20000   gap=100    rep=1
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=64       n=20000   gap=100    rep=1
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=64       n=20000   gap=100    rep=2
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=64       n=20000   gap=100    rep=2
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=64       n=20000   gap=100    rep=2
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=64       n=20000   gap=100    rep=3
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=64       n=20000   gap=100    rep=3
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=64       n=20000   gap=100    rep=3
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=64       n=20000   gap=100    rep=4
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=64       n=20000   gap=100    rep=4
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=64       n=20000   gap=100    rep=4
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=64       n=20000   gap=100    rep=5
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=64       n=20000   gap=100    rep=5
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=64       n=20000   gap=100    rep=5
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=256      n=20000   gap=100    rep=1
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=256      n=20000   gap=100    rep=1
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=256      n=20000   gap=100    rep=1
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=256      n=20000   gap=100    rep=2
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=256      n=20000   gap=100    rep=2
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=256      n=20000   gap=100    rep=2
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=256      n=20000   gap=100    rep=3
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=256      n=20000   gap=100    rep=3
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=256      n=20000   gap=100    rep=3
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=256      n=20000   gap=100    rep=4
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=256      n=20000   gap=100    rep=4
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=256      n=20000   gap=100    rep=4
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=256      n=20000   gap=100    rep=5
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=256      n=20000   gap=100    rep=5
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=256      n=20000   gap=100    rep=5
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=1024     n=20000   gap=100    rep=1
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=1024     n=20000   gap=100    rep=1
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=1024     n=20000   gap=100    rep=1
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=1024     n=20000   gap=100    rep=2
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=1024     n=20000   gap=100    rep=2
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=1024     n=20000   gap=100    rep=2
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=1024     n=20000   gap=100    rep=3
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=1024     n=20000   gap=100    rep=3
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=1024     n=20000   gap=100    rep=3
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=1024     n=20000   gap=100    rep=4
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=1024     n=20000   gap=100    rep=4
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=1024     n=20000   gap=100    rep=4
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=1024     n=20000   gap=100    rep=5
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=1024     n=20000   gap=100    rep=5
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=1024     n=20000   gap=100    rep=5
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=4096     n=20000   gap=100    rep=1
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=4096     n=20000   gap=100    rep=1
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=4096     n=20000   gap=100    rep=1
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=4096     n=20000   gap=100    rep=2
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=4096     n=20000   gap=100    rep=2
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=4096     n=20000   gap=100    rep=2
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=4096     n=20000   gap=100    rep=3
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=4096     n=20000   gap=100    rep=3
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=4096     n=20000   gap=100    rep=3
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=4096     n=20000   gap=100    rep=4
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=4096     n=20000   gap=100    rep=4
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=4096     n=20000   gap=100    rep=4
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=4096     n=20000   gap=100    rep=5
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=4096     n=20000   gap=100    rep=5
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=4096     n=20000   gap=100    rep=5
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=16384    n=20000   gap=100    rep=1
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=16384    n=20000   gap=100    rep=1
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=16384    n=20000   gap=100    rep=1
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=16384    n=20000   gap=100    rep=2
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=16384    n=20000   gap=100    rep=2
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=16384    n=20000   gap=100    rep=2
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=16384    n=20000   gap=100    rep=3
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=16384    n=20000   gap=100    rep=3
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=16384    n=20000   gap=100    rep=3
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=16384    n=20000   gap=100    rep=4
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=16384    n=20000   gap=100    rep=4
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=16384    n=20000   gap=100    rep=4
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=16384    n=20000   gap=100    rep=5
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=16384    n=20000   gap=100    rep=5
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=16384    n=20000   gap=100    rep=5
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=65536    n=20000   gap=124    rep=1
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=65536    n=20000   gap=124    rep=1
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=65536    n=20000   gap=124    rep=1
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=65536    n=20000   gap=124    rep=2
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=65536    n=20000   gap=124    rep=2
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=65536    n=20000   gap=124    rep=2
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=65536    n=20000   gap=124    rep=3
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=65536    n=20000   gap=124    rep=3
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=65536    n=20000   gap=124    rep=3
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=65536    n=20000   gap=124    rep=4
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=65536    n=20000   gap=124    rep=4
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=65536    n=20000   gap=124    rep=4
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=65536    n=20000   gap=124    rep=5
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=65536    n=20000   gap=124    rep=5
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=65536    n=20000   gap=124    rep=5
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=262144   n=2000    gap=500    rep=1
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=262144   n=2000    gap=500    rep=1
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=262144   n=2000    gap=500    rep=1
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=262144   n=2000    gap=500    rep=2
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=262144   n=2000    gap=500    rep=2
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=262144   n=2000    gap=500    rep=2
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=262144   n=2000    gap=500    rep=3
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=262144   n=2000    gap=500    rep=3
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=262144   n=2000    gap=500    rep=3
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=262144   n=2000    gap=500    rep=4
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=262144   n=2000    gap=500    rep=4
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=262144   n=2000    gap=500    rep=4
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=262144   n=2000    gap=500    rep=5
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=262144   n=2000    gap=500    rep=5
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=262144   n=2000    gap=500    rep=5
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=1048576  n=500     gap=2000   rep=1
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=1048576  n=500     gap=2000   rep=1
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=1048576  n=500     gap=2000   rep=1
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=1048576  n=500     gap=2000   rep=2
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=1048576  n=500     gap=2000   rep=2
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=1048576  n=500     gap=2000   rep=2
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=1048576  n=500     gap=2000   rep=3
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=1048576  n=500     gap=2000   rep=3
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=1048576  n=500     gap=2000   rep=3
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=1048576  n=500     gap=2000   rep=4
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=1048576  n=500     gap=2000   rep=4
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=1048576  n=500     gap=2000   rep=4
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running zcring  size=1048576  n=500     gap=2000   rep=5
+  pages=4k
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running pipe    size=1048576  n=500     gap=2000   rep=5
+warning: no x86_pkg_temp/TCPU thermal zone found; skipping thermal gate
+running unix    size=1048576  n=500     gap=2000   rep=5
+
+wrote results/sweep_ryzen.csv
+transport  size     mean_ns  p50_ns  p99_ns  p999_ns  p9999_ns  max_ns
+zcring     64       89       90      110     131      682       9082
+pipe       64       2910     2876    3238    4110     6074      49235
+unix       64       3945     3899    4340    4611     26712     185531
+zcring     64       90       90      110     160      181       18814
+pipe       64       2922     2896    3238    3678     5833      16658
+unix       64       3963     3929    4390    6345     7617      7978
+zcring     64       90       90      111     160      1273      15726
+pipe       64       2916     2886    3237    5542     5964      6033
+unix       64       3972     3919    4470    7177     7747      8609
+zcring     64       95       90      300     651      2285      13580
+pipe       64       2966     2897    3197    3849     146866    345867
+unix       64       3949     3929    4280    4469     7667      24193
+zcring     64       89       90      101     160      170       14782
+pipe       64       3061     2867    5141    5762     18941     88593
+unix       64       3973     3929    4440    6644     7587      29444
+zcring     256      94       90      130     161      230       8538
+pipe       256      2977     2896    3177    5633     215284    311502
+unix       256      4238     4048    6233    7456     11956     12757
+zcring     256      93       90      120     161      642       11314
+pipe       256      2929     2886    3297    5572     6253      6344
+unix       256      4086     4049    4610    7276     9360      18669
+zcring     256      95       90      120     161      1153      23910
+pipe       256      2921     2886    3197    5612     6003      6163
+unix       256      4180     4038    4530    7576     384694    582577
+zcring     256      93       90      120     160      171       18830
+pipe       256      2929     2906    3176    5431     5802      27807
+unix       256      4075     4058    4460    7145     7856      8027
+zcring     256      95       90      130     150      220       261
+pipe       256      2953     2926    3217    5481     5952      16975
+unix       256      4064     4048    4429    6102     7666      24350
+zcring     1024     149      150     161     260      2084      23739
+pipe       1024     2996     2966    3327    3477     3928      18247
+unix       1024     4244     4228    4680    4940     9880      28709
+zcring     1024     150      150     180     191      261       11293
+pipe       1024     2992     2966    3267    3427     3557      4329
+unix       1024     4270     4238    4650    5982     115333    214032
+zcring     1024     163      150     321     1383     24139     44920
+pipe       1024     3023     2966    3257    5772     67425     266094
+unix       1024     4615     4359    7605    9880     31012     35421
+zcring     1024     151      150     241     401      421       751
+pipe       1024     2989     2946    3366    5531     6233      12935
+unix       1024     4251     4229    4579    7425     8277      37134
+zcring     1024     148      150     170     251      271       391
+pipe       1024     2978     2956    3227    5461     5871      5952
+unix       1024     4253     4229    4579    7185     8186      8426
+zcring     4096     359      361     1343    1894     8648      18216
+pipe       4096     3216     3166    3637    5752     6433      14959
+unix       4096     5104     5030    5530    34929    49247     59708
+zcring     4096     878      361     421     672      1217798   1417651
+pipe       4096     3223     3176    3587    6022     6572      6874
+unix       4096     5133     5040    5551    32523    71020     195323
+zcring     4096     786      370     431     651      1075175   1274987
+pipe       4096     3244     3186    3687    6082     6713      7465
+unix       4096     5115     5040    5591    29999    42473     47973
+zcring     4096     876      361     421     631      1215141   1414961
+pipe       4096     3212     3166    3607    6022     6523      16853
+unix       4096     5110     5030    5591    31502    43094     47903
+zcring     4096     335      361     421     631      701       30700
+pipe       4096     3223     3176    3597    5972     6633      11633
+unix       4096     5123     5039    5631    33054    44437     75006
+zcring     16384    903      861     1232    1503     4489      33214
+pipe       16384    6108     6002    6472    45639    66058     81969
+unix       16384    6780     6853    7835    10560    31521     187833
+zcring     16384    899      852     1232    1503     2886      50598
+pipe       16384    6049     5882    6613    75125    96816     111676
+unix       16384    8456     6803    9108    44125    2719632   2915881
+zcring     16384    1037     871     1453    33885    42021     46459
+pipe       16384    6192     5951    7545    75946    111044    125501
+unix       16384    6892     6863    9338    31490    49916     97337
+zcring     16384    1004     881     1383    25529    37913     55977
+pipe       16384    6322     5941    6863    75676    136672    1867834
+unix       16384    6978     6923    7865    10671    11351     37722
+zcring     16384    912      862     1242    1593     7955      28395
+pipe       16384    6050     5872    6492    76096    111063    118617
+unix       16384    8565     6903    7915    10700    2764932   2961188
+zcring     65536    5092     3176    3848    518242   2720604   2966414
+pipe       65536    17273    15831   58282   121723   247613    3020230
+unix       65536    13185    13125   17864   20910    48973     110460
+zcring     65536    3191     3166    3837    5671     36039     43373
+pipe       65536    17031    15911   63731   124347   133153    161387
+unix       65536    13066    13065   17714   22132    62910     77067
+zcring     65536    3199     3176    3837    5611     14708     65264
+pipe       65536    17253    16351   55396   120639   130929    157850
+unix       65536    13090    13075   17574   19698    56918     64343
+zcring     65536    4961     3156    3857    427222   2643564   2889381
+pipe       65536    17407    15930   61978   127512   242320    3014517
+unix       65536    13219    13185   17844   22082    49424     54123
+zcring     65536    3204     3186    3807    5410     6683      48362
+pipe       65536    16876    15780   56306   121089   143853    178649
+unix       65536    13158    13125   17754   20689    50736     75914
+zcring     262144   11917    11852   13004   13536    70053     70053
+pipe       262144   77561    73273   172077  200532   225692    225692
+unix       262144   40971    40850   49367   59987    119654    119654
+zcring     262144   20058    11854   13286   2104586  2598813   2598813
+pipe       262144   78573    71650   171395  179891   4595423   4595423
+unix       262144   44141    44426   51280   63324    133200    133200
+zcring     262144   11805    11823   12895   13667    25961     25961
+pipe       262144   76676    70788   160423  206112   2412547   2412547
+unix       262144   44402    44627   50589   67632    122699    122699
+zcring     262144   11838    11833   12985   13366    39667     39667
+pipe       262144   76370    71419   167186  184079   2268018   2268018
+unix       262144   41569    41651   51350   62932    128951    128951
+zcring     262144   11744    11803   13006   13796    14047     14047
+pipe       262144   73734    70307   153158  182545   187545    187545
+unix       262144   42897    42863   49516   52282    117269    117269
+zcring     1048576  46954    44867   49035   575358   575358    575358
+pipe       1048576  324828   305623  432920  1617498  1617498   1617498
+unix       1048576  134047   134761  150622  162204   162204    162204
+zcring     1048576  48111    46129   113219  294480   294480    294480
+pipe       1048576  327748   310831  477383  532881   532881    532881
+unix       1048576  141794   136664  163996  2884293  2884293   2884293
+zcring     1048576  43653    43804   47642   228701   228701    228701
+pipe       1048576  321733   305609  474636  623742   623742    623742
+unix       1048576  137016   137826  166310  174386   174386    174386
+zcring     1048576  44607    44305   69213   227979   227979    227979
+pipe       1048576  328301   309325  493940  535981   535981    535981
+unix       1048576  142390   136803  168795  2121879  2121879   2121879
+zcring     1048576  41764    41380   46910   98950    98950     98950
+pipe       1048576  340974   320315  522042  536901   536901    536901
+unix       1048576  132282   133115  166539  180637   180637    180637
