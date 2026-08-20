@@ -266,7 +266,45 @@ point checked, including the two conclusions that matter most: the 1 MiB
 N=1 loss and the fan-out crossover. The rate choice isn't doing the work —
 the C-state trade-off (below) and the fan-out scaling (further below) are.
 
-### Why large payloads lose here, and why that's disclosed rather than hidden
+### Why large payloads lose *on this CPU* — resolved 20 Aug by measuring another one
+
+> **Read this box first; the investigation below is how we got here.**
+>
+> On the i3-1115G4, single-consumer transfers above 256 KiB are slower than a
+> UNIX socket (0.68×–0.84×). Four explanations were proposed and each was
+> tested and eliminated: offered rate, thermal throttling, busy-spin power
+> draw, and TLB pressure. That left one candidate — **platform
+> power/frequency behaviour, i.e. not a property of this code.**
+>
+> That prediction has now been tested directly, by running the identical
+> sweep on a different microarchitecture (`results/sweep_ryzen.csv`, AMD
+> Ryzen 9 270, 5 reps, same `--touch`, same pinning discipline, same
+> C-states-disabled configuration):
+>
+> | payload | i3-1115G4 | Ryzen 9 270 |
+> |---|---|---|
+> | 64 B | 19.6× | 32.0× |
+> | 4 KiB | 3.66× | 8.75× |
+> | 64 KiB | 1.01× | 4.13× |
+> | 256 KiB | **0.68×** | **3.62×** |
+> | 1 MiB | **0.84×** | **3.08×** |
+>
+> **The loss inverts.** At 1 MiB zcring's p50 falls 183 µs → 44 µs while the
+> UNIX socket barely moves, 155 µs → 136 µs. The p50 reproduces to three
+> significant figures across all five repetitions.
+>
+> So the honest statement is: *on this embedded-class Intel part, and under
+> the C-state configuration the determinism claim requires, large single-
+> consumer transfers cost more than a socket. That is a platform interaction,
+> not a property of the design, and a second microarchitecture shows the
+> mechanism reversing.*
+>
+> **The headline claims in this README remain anchored to the i3** — 2–4
+> cores is representative of embedded deployment, and an 8C/16T desktop part
+> is not. The Zen data is secondary and labelled; **no tail statistic from it
+> is quotable** (see `results/PROVENANCE.md` for why). It is here to answer
+> one question — do the conclusions survive a different microarchitecture —
+> and the answer is yes, more strongly than expected.
 
 **Small-to-medium messages (≤ 16 KiB): 1.55×–19.6×.** The syscall and fixed
 per-message overhead dominate here, and zero-copy removes them from the data
@@ -343,28 +381,37 @@ disabled** at this rate. That also corrects an earlier claim in this repo that
 idle window is too short for the governor to pick a deep state, and false at
 2000 µs. It was a rate-specific observation reported as a general one.
 
-So three candidate explanations have now been raised and eliminated — offered
-rate, thermal throttling, and busy-spin — and one new mechanism has been
-identified and is fully explained (blocking consumers, of *any* transport, pay
-idle-state exit latency on wake; this is why disabling C-states is a
-determinism requirement rather than a preference). What is still unexplained
-is the ~65–70% that zcring pays at 1 MiB when C-states are disabled,
-regardless of waiter. The remaining candidates are platform properties rather
-than properties of this code — uncore or memory-controller frequency, or a
-turbo/RAPL power budget a never-fully-idle package cannot reach. Reported as
-an open mechanism rather than dressed up as a closed one.
+**Test four: TLB pressure.** At 1 MiB with 4 KiB pages each message spans
+256 PTEs, walked once per side in two address spaces, against an L1 dTLB of
+~64 entries. Huge-page backing makes that one PTE per side. Built, and
+A/B'd with `pages=hugetlb` confirmed on every huge row
+(`results/hugepage_ab.csv`): **+1.7% mean, +1.5% p50.** Inside the
+pre-registered "few percent" stop condition, so recorded as negative and the
+investigation stopped rather than continued.
 
-**This is a genuine, disclosed trade-off, not a flaw to explain away:**
-determinism (bounded, predictable small-message tail latency, the property
-this problem statement actually asks for) costs peak large-payload
-throughput on this design, at N=1. The historical "1.47× at 1 MiB" figure
-from an earlier draft was measured under a C-state configuration that
-predates and conflicts with the tail-latency fix — it is superseded, not
-reconciled, by the table above.
+So four candidate explanations were raised and eliminated — offered rate,
+thermal throttling, busy-spin, and address translation — and one new mechanism
+was identified and fully explained along the way (blocking consumers, of *any*
+transport, pay idle-state exit latency on wake; this is why disabling C-states
+is a determinism requirement rather than a preference).
 
-**Where the large-payload case is won back: fan-out.** See below — the
-zero-copy fan-out advantage grows with consumer count while this C-state
-cost does not, and the crossover happens fast.
+**Test five settled it.** With every code-side explanation eliminated, the
+surviving hypothesis was that the cost is a platform property — uncore or
+memory-controller frequency, or a turbo/RAPL budget a never-fully-idle package
+cannot reach. The direct test of that is to change the platform. The box at
+the top of this section is the result: **on AMD Zen the loss inverts to 3.08×
+at 1 MiB.** The prediction held.
+
+This is worth stating as a method rather than a number. A limitation was
+disclosed, four explanations were proposed and each killed by measurement, the
+survivor made a falsifiable prediction, and independent hardware confirmed it.
+The historical "1.47× at 1 MiB" figure from an earlier draft was measured
+under a C-state configuration that predates and conflicts with the
+tail-latency fix — it is superseded, not reconciled, by the tables here.
+
+**Where the large-payload case is won back even on the i3: fan-out.** See
+below — the zero-copy advantage grows with consumer count while this platform
+cost does not, and the crossover happens at N=2.
 
 ## Fan-out results
 
@@ -591,12 +638,15 @@ Open problem #3, the same hardware ceiling as N=4 fan-out.
 via `zc_bcast_reap()`, and adaptive spin-then-futex notification with an
 online-learned spin budget (above).
 
-- **The fan-out dataset needs regenerating under `--notify`.** Removing
-  `--yield` made `results/fanout.csv` and `results/fanout_verify.csv`
-  historical: they remain valid as measured, but they cannot be reproduced
-  from this tree and must not share a table with notify-mode numbers. The
-  fan-out crossover claim rests on them until that sweep is re-run, which is
-  the single highest-value measurement outstanding.
+- **The measurement machine no longer exists.** The i3-1115G4 failed on
+  14 Aug; every canonical dataset here came from it. Valid as measured, not
+  reproducible by us on demand. `scripts/lib.sh:check_machine()` refuses to
+  write a canonical dataset filename on a different CPU. Full statement in
+  `results/PROVENANCE.md`.
+- **No Ryzen tail statistic is quotable.** `results/sweep_ryzen.csv` has a
+  rock-solid p50 and a bimodal p99.99 across reps — external interference on
+  an unquieted desktop, not transport behaviour. p50 only, until a quiesced
+  re-run exists.
 - **No `eventfd`/`epoll` bridge yet.** A consumer cannot currently wait on a
   zcring ring and a socket in one `epoll_wait()`. That is the remaining piece
   of Layer 2 notification.
@@ -609,10 +659,13 @@ online-learned spin budget (above).
   mid-`reserve` leaks that slot — `zc_bcast_reap()` recovers dead consumers
   only. Consumer death is the more common failure and the one that could
   deadlock the ring, which is why it came first.
-- **Fan-out scalability cannot be demonstrated past N≈2 on this hardware.**
-  Two physical cores means N=4 oversubscribes regardless of implementation
-  quality. The trend across N=1,2,4 is real, but the N=4 absolute numbers are
-  a property of the measurement box, and should be presented that way.
+- **Fan-out growth past N=2 is not claimed, and not because of the hardware.**
+  In broadcast mode every consumer runs on every message, so consumer count is
+  bounded by core count on *any* platform — one producer plus four consumers
+  oversubscribes a four-core embedded target exactly as it does the
+  measurement box. The crossover sits at N=2, which fits everywhere. Measuring
+  N=8 on a desktop CPU would produce a prettier number that is *less*
+  representative of the problem statement, not more.
 - `zc_bcast_reap()` liveness detection is process-granular: it cannot see a
   dead *thread* inside a live process, and it cannot reclaim a zombie until
   its parent has waited for it. Both are documented at `src/zcring.h` §3.
