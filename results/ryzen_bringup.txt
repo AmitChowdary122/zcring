@@ -42,3 +42,47 @@ all checks passed
 === 64B pipe ===
   p99.99       7474 ns
   max         11431 ns
+=== siblings ===
+cpu0: 0,8
+cpu1: 1,9
+cpu2: 2,10
+cpu3: 3,11
+cpu4: 4,12
+=== demo ===
+  memory traffic avoided vs sockets:   [1m    3.04 GB[0m
+                                                                    
+[H[1m  zcring FAN-OUT DEMO  --  camera -> {edge-count, jitter, checksum}[0m
+  transport: [1mZCRING (broadcast, zero-copy)[0m                              
+  ================================================================
+
+  frames sent   [1m    1800[0m     elapsed   00:01:00     drops(producer) 0
+
+  ----------------------------------------------------------------
+  consumer          p50         p99         frames        drops
+  ----------------------------------------------------------------
+  edge-count   [1m  251 us[0m   [1m  277 us[0m         1800          0
+  jitter       [1m   76 us[0m   [1m   98 us[0m         1800          0
+  checksum     [1m  314 us[0m   [1m  339 us[0m         1800          0
+  ----------------------------------------------------------------
+
+  memory traffic avoided vs sockets:   [1m    3.09 GB[0m
+                                                                    
+
+  stopped after 1800 frames published, 0 producer-side drops (1800 ticks total).
+=== 64B zcring pinned ===
+  pages=4k
+transport=zcring  consumers=1   size=64       n=50000
+  mean           87 ns
+  p50            90 ns
+  p99           100 ns
+  p99.9         300 ns
+  p99.99        630 ns
+  max          2421 ns
+=== 64B pipe pinned ===
+transport=pipe    consumers=1   size=64       n=50000
+  mean         8503 ns
+  p50          3442 ns
+  p99          7073 ns
+  p99.9     1949881 ns
+  p99.99    3060263 ns
+  max       3208713 ns
