@@ -1,0 +1,813 @@
+producer cpu:      2 (physical core 0)
+consumer cpu list: 1,3 (physical cores: 1)
+consumers per run: 1 2 4  (wrapping over the list above)
+
+rate fraction: 25% of saturation
+N=1 zcring  size=64       n=50000   gap=100    rep=1
+  pages=4k
+  learned[c0] spin=10207ns gap_ewma=97600ns wake_ewma=2192ns burn_ewma=14238ns waits=51868 blocks=51717 (99.7%) explores=376
+N=1 pipe    size=64       n=50000   gap=100    rep=1
+N=1 unix    size=64       n=50000   gap=100    rep=1
+N=1 zcring  size=64       n=50000   gap=100    rep=2
+  pages=4k
+  learned[c0] spin=12419ns gap_ewma=97471ns wake_ewma=2329ns burn_ewma=10908ns waits=51835 blocks=51684 (99.7%) explores=359
+N=1 pipe    size=64       n=50000   gap=100    rep=2
+N=1 unix    size=64       n=50000   gap=100    rep=2
+N=1 zcring  size=64       n=50000   gap=100    rep=3
+  pages=4k
+  learned[c0] spin=11912ns gap_ewma=97647ns wake_ewma=2151ns burn_ewma=12503ns waits=51856 blocks=51704 (99.7%) explores=384
+N=1 pipe    size=64       n=50000   gap=100    rep=3
+N=1 unix    size=64       n=50000   gap=100    rep=3
+N=1 zcring  size=64       n=50000   gap=100    rep=4
+  pages=4k
+  learned[c0] spin=7304ns gap_ewma=97679ns wake_ewma=2147ns burn_ewma=11412ns waits=51844 blocks=51644 (99.6%) explores=442
+N=1 pipe    size=64       n=50000   gap=100    rep=4
+N=1 unix    size=64       n=50000   gap=100    rep=4
+N=1 zcring  size=64       n=50000   gap=100    rep=5
+  pages=4k
+  learned[c0] spin=11123ns gap_ewma=97614ns wake_ewma=2180ns burn_ewma=10040ns waits=51829 blocks=51654 (99.7%) explores=422
+N=1 pipe    size=64       n=50000   gap=100    rep=5
+N=1 unix    size=64       n=50000   gap=100    rep=5
+thermal gate: package at 75C, waiting for <60C...
+thermal gate: at 57C after 5s, C-states redisabled, continuing
+N=1 zcring  size=256      n=50000   gap=100    rep=1
+  pages=4k
+  learned[c0] spin=13483ns gap_ewma=134890ns wake_ewma=4194ns burn_ewma=12070ns waits=51834 blocks=51647 (99.6%) explores=440
+N=1 pipe    size=256      n=50000   gap=100    rep=1
+N=1 unix    size=256      n=50000   gap=100    rep=1
+N=1 zcring  size=256      n=50000   gap=100    rep=2
+  pages=4k
+  learned[c0] spin=16180ns gap_ewma=97615ns wake_ewma=2189ns burn_ewma=11734ns waits=51822 blocks=51661 (99.7%) explores=412
+N=1 pipe    size=256      n=50000   gap=100    rep=2
+N=1 unix    size=256      n=50000   gap=100    rep=2
+N=1 zcring  size=256      n=50000   gap=100    rep=3
+  pages=4k
+  learned[c0] spin=11598ns gap_ewma=97597ns wake_ewma=2172ns burn_ewma=12302ns waits=51765 blocks=51619 (99.7%) explores=369
+N=1 pipe    size=256      n=50000   gap=100    rep=3
+N=1 unix    size=256      n=50000   gap=100    rep=3
+N=1 zcring  size=256      n=50000   gap=100    rep=4
+  pages=4k
+  learned[c0] spin=12232ns gap_ewma=97637ns wake_ewma=2143ns burn_ewma=12228ns waits=51827 blocks=51664 (99.7%) explores=420
+N=1 pipe    size=256      n=50000   gap=100    rep=4
+N=1 unix    size=256      n=50000   gap=100    rep=4
+N=1 zcring  size=256      n=50000   gap=100    rep=5
+  pages=4k
+  learned[c0] spin=11632ns gap_ewma=97598ns wake_ewma=2189ns burn_ewma=10828ns waits=51847 blocks=51670 (99.7%) explores=415
+N=1 pipe    size=256      n=50000   gap=100    rep=5
+N=1 unix    size=256      n=50000   gap=100    rep=5
+thermal gate: package at 82C, waiting for <60C...
+thermal gate: at 57C after 10s, C-states redisabled, continuing
+N=1 zcring  size=1024     n=50000   gap=100    rep=1
+  pages=4k
+  learned[c0] spin=14259ns gap_ewma=97553ns wake_ewma=2172ns burn_ewma=12731ns waits=51807 blocks=51655 (99.7%) explores=387
+N=1 pipe    size=1024     n=50000   gap=100    rep=1
+N=1 unix    size=1024     n=50000   gap=100    rep=1
+N=1 zcring  size=1024     n=50000   gap=100    rep=2
+  pages=4k
+  learned[c0] spin=6925ns gap_ewma=97467ns wake_ewma=2307ns burn_ewma=14154ns waits=51867 blocks=51700 (99.7%) explores=407
+N=1 pipe    size=1024     n=50000   gap=100    rep=2
+N=1 unix    size=1024     n=50000   gap=100    rep=2
+N=1 zcring  size=1024     n=50000   gap=100    rep=3
+  pages=4k
+  learned[c0] spin=12853ns gap_ewma=97525ns wake_ewma=2171ns burn_ewma=12162ns waits=51831 blocks=51653 (99.7%) explores=435
+N=1 pipe    size=1024     n=50000   gap=100    rep=3
+N=1 unix    size=1024     n=50000   gap=100    rep=3
+N=1 zcring  size=1024     n=50000   gap=100    rep=4
+  pages=4k
+  learned[c0] spin=9382ns gap_ewma=97580ns wake_ewma=2167ns burn_ewma=12765ns waits=51812 blocks=51653 (99.7%) explores=388
+N=1 pipe    size=1024     n=50000   gap=100    rep=4
+N=1 unix    size=1024     n=50000   gap=100    rep=4
+N=1 zcring  size=1024     n=50000   gap=100    rep=5
+  pages=4k
+  learned[c0] spin=11324ns gap_ewma=97526ns wake_ewma=2184ns burn_ewma=10784ns waits=51806 blocks=51642 (99.7%) explores=380
+N=1 pipe    size=1024     n=50000   gap=100    rep=5
+N=1 unix    size=1024     n=50000   gap=100    rep=5
+thermal gate: package at 82C, waiting for <60C...
+thermal gate: at 58C after 10s, C-states redisabled, continuing
+N=1 zcring  size=4096     n=50000   gap=100    rep=1
+  pages=4k
+  learned[c0] spin=5357ns gap_ewma=97238ns wake_ewma=2185ns burn_ewma=12561ns waits=51912 blocks=51752 (99.7%) explores=374
+N=1 pipe    size=4096     n=50000   gap=100    rep=1
+N=1 unix    size=4096     n=50000   gap=100    rep=1
+N=1 zcring  size=4096     n=50000   gap=100    rep=2
+  pages=4k
+  learned[c0] spin=10845ns gap_ewma=97328ns wake_ewma=2177ns burn_ewma=14403ns waits=51932 blocks=51752 (99.7%) explores=419
+N=1 pipe    size=4096     n=50000   gap=100    rep=2
+N=1 unix    size=4096     n=50000   gap=100    rep=2
+N=1 zcring  size=4096     n=50000   gap=100    rep=3
+  pages=4k
+  learned[c0] spin=11759ns gap_ewma=97314ns wake_ewma=2155ns burn_ewma=12239ns waits=51931 blocks=51775 (99.7%) explores=391
+N=1 pipe    size=4096     n=50000   gap=100    rep=3
+N=1 unix    size=4096     n=50000   gap=100    rep=3
+N=1 zcring  size=4096     n=50000   gap=100    rep=4
+  pages=4k
+  learned[c0] spin=15961ns gap_ewma=97312ns wake_ewma=2157ns burn_ewma=11012ns waits=51926 blocks=51762 (99.7%) explores=404
+N=1 pipe    size=4096     n=50000   gap=100    rep=4
+N=1 unix    size=4096     n=50000   gap=100    rep=4
+N=1 zcring  size=4096     n=50000   gap=100    rep=5
+  pages=4k
+  learned[c0] spin=11880ns gap_ewma=97245ns wake_ewma=2186ns burn_ewma=12180ns waits=51959 blocks=51804 (99.7%) explores=374
+N=1 pipe    size=4096     n=50000   gap=100    rep=5
+N=1 unix    size=4096     n=50000   gap=100    rep=5
+thermal gate: package at 85C, waiting for <60C...
+thermal gate: at 57C after 15s, C-states redisabled, continuing
+N=1 zcring  size=16384    n=50000   gap=100    rep=1
+  pages=4k
+  learned[c0] spin=6173ns gap_ewma=96165ns wake_ewma=2201ns burn_ewma=12021ns waits=51819 blocks=51655 (99.7%) explores=415
+N=1 pipe    size=16384    n=50000   gap=100    rep=1
+N=1 unix    size=16384    n=50000   gap=100    rep=1
+N=1 zcring  size=16384    n=50000   gap=100    rep=2
+  pages=4k
+  learned[c0] spin=14168ns gap_ewma=96130ns wake_ewma=2229ns burn_ewma=11719ns waits=51810 blocks=51638 (99.7%) explores=445
+N=1 pipe    size=16384    n=50000   gap=100    rep=2
+N=1 unix    size=16384    n=50000   gap=100    rep=2
+N=1 zcring  size=16384    n=50000   gap=100    rep=3
+  pages=4k
+  learned[c0] spin=11799ns gap_ewma=96175ns wake_ewma=2188ns burn_ewma=11991ns waits=51813 blocks=51644 (99.7%) explores=403
+N=1 pipe    size=16384    n=50000   gap=100    rep=3
+N=1 unix    size=16384    n=50000   gap=100    rep=3
+N=1 zcring  size=16384    n=50000   gap=100    rep=4
+  pages=4k
+  learned[c0] spin=8294ns gap_ewma=96217ns wake_ewma=2190ns burn_ewma=13347ns waits=51866 blocks=51709 (99.7%) explores=377
+N=1 pipe    size=16384    n=50000   gap=100    rep=4
+N=1 unix    size=16384    n=50000   gap=100    rep=4
+N=1 zcring  size=16384    n=50000   gap=100    rep=5
+  pages=4k
+  learned[c0] spin=11507ns gap_ewma=96138ns wake_ewma=2195ns burn_ewma=12016ns waits=51882 blocks=51702 (99.7%) explores=399
+N=1 pipe    size=16384    n=50000   gap=100    rep=5
+N=1 unix    size=16384    n=50000   gap=100    rep=5
+thermal gate: package at 83C, waiting for <60C...
+thermal gate: at 58C after 15s, C-states redisabled, continuing
+N=1 zcring  size=65536    n=50000   gap=124    rep=1
+  pages=4k
+  learned[c0] spin=12649ns gap_ewma=117218ns wake_ewma=2222ns burn_ewma=13004ns waits=51830 blocks=51639 (99.6%) explores=413
+N=1 pipe    size=65536    n=50000   gap=124    rep=1
+N=1 unix    size=65536    n=50000   gap=124    rep=1
+N=1 zcring  size=65536    n=50000   gap=124    rep=2
+  pages=4k
+  learned[c0] spin=8234ns gap_ewma=117232ns wake_ewma=2256ns burn_ewma=15097ns waits=51874 blocks=51694 (99.7%) explores=396
+N=1 pipe    size=65536    n=50000   gap=124    rep=2
+N=1 unix    size=65536    n=50000   gap=124    rep=2
+N=1 zcring  size=65536    n=50000   gap=124    rep=3
+  pages=4k
+  learned[c0] spin=16075ns gap_ewma=117157ns wake_ewma=2273ns burn_ewma=14443ns waits=51822 blocks=51655 (99.7%) explores=402
+N=1 pipe    size=65536    n=50000   gap=124    rep=3
+N=1 unix    size=65536    n=50000   gap=124    rep=3
+N=1 zcring  size=65536    n=50000   gap=124    rep=4
+  pages=4k
+  learned[c0] spin=10057ns gap_ewma=117100ns wake_ewma=2388ns burn_ewma=14005ns waits=51814 blocks=51628 (99.6%) explores=413
+N=1 pipe    size=65536    n=50000   gap=124    rep=4
+N=1 unix    size=65536    n=50000   gap=124    rep=4
+N=1 zcring  size=65536    n=50000   gap=124    rep=5
+  pages=4k
+  learned[c0] spin=14744ns gap_ewma=117137ns wake_ewma=2276ns burn_ewma=14603ns waits=51909 blocks=51708 (99.6%) explores=387
+N=1 pipe    size=65536    n=50000   gap=124    rep=5
+N=1 unix    size=65536    n=50000   gap=124    rep=5
+thermal gate: package at 88C, waiting for <60C...
+thermal gate: at 59C after 20s, C-states redisabled, continuing
+N=1 zcring  size=262144   n=5000    gap=500    rep=1
+  pages=4k
+  learned[c0] spin=55280ns gap_ewma=483468ns wake_ewma=2408ns burn_ewma=60531ns waits=6978 blocks=6948 (99.6%) explores=58
+N=1 pipe    size=262144   n=5000    gap=500    rep=1
+N=1 unix    size=262144   n=5000    gap=500    rep=1
+N=1 zcring  size=262144   n=5000    gap=500    rep=2
+  pages=4k
+  learned[c0] spin=64270ns gap_ewma=484646ns wake_ewma=2496ns burn_ewma=54454ns waits=6993 blocks=6967 (99.6%) explores=53
+N=1 pipe    size=262144   n=5000    gap=500    rep=2
+N=1 unix    size=262144   n=5000    gap=500    rep=2
+N=1 zcring  size=262144   n=5000    gap=500    rep=3
+  pages=4k
+  learned[c0] spin=61387ns gap_ewma=484563ns wake_ewma=2576ns burn_ewma=62068ns waits=6984 blocks=6958 (99.6%) explores=47
+N=1 pipe    size=262144   n=5000    gap=500    rep=3
+N=1 unix    size=262144   n=5000    gap=500    rep=3
+N=1 zcring  size=262144   n=5000    gap=500    rep=4
+  pages=4k
+  learned[c0] spin=36930ns gap_ewma=484465ns wake_ewma=2683ns burn_ewma=65129ns waits=6989 blocks=6963 (99.6%) explores=63
+N=1 pipe    size=262144   n=5000    gap=500    rep=4
+N=1 unix    size=262144   n=5000    gap=500    rep=4
+N=1 zcring  size=262144   n=5000    gap=500    rep=5
+  pages=4k
+  learned[c0] spin=53819ns gap_ewma=484576ns wake_ewma=2550ns burn_ewma=60742ns waits=6990 blocks=6962 (99.6%) explores=65
+N=1 pipe    size=262144   n=5000    gap=500    rep=5
+N=1 unix    size=262144   n=5000    gap=500    rep=5
+thermal gate: package at 87C, waiting for <60C...
+thermal gate: at 59C after 15s, C-states redisabled, continuing
+N=1 zcring  size=1048576  n=1250    gap=2000   rep=1
+  pages=4k
+  learned[c0] spin=243160ns gap_ewma=1945877ns wake_ewma=6909ns burn_ewma=243658ns waits=3250 blocks=3240 (99.7%) explores=23
+N=1 pipe    size=1048576  n=1250    gap=2000   rep=1
+N=1 unix    size=1048576  n=1250    gap=2000   rep=1
+N=1 zcring  size=1048576  n=1250    gap=2000   rep=2
+  pages=4k
+  learned[c0] spin=241875ns gap_ewma=1948079ns wake_ewma=3103ns burn_ewma=215642ns waits=3250 blocks=3242 (99.8%) explores=24
+N=1 pipe    size=1048576  n=1250    gap=2000   rep=2
+N=1 unix    size=1048576  n=1250    gap=2000   rep=2
+N=1 zcring  size=1048576  n=1250    gap=2000   rep=3
+  pages=4k
+  learned[c0] spin=177492ns gap_ewma=1917215ns wake_ewma=34802ns burn_ewma=240805ns waits=3250 blocks=3240 (99.7%) explores=27
+N=1 pipe    size=1048576  n=1250    gap=2000   rep=3
+N=1 unix    size=1048576  n=1250    gap=2000   rep=3
+N=1 zcring  size=1048576  n=1250    gap=2000   rep=4
+  pages=4k
+  learned[c0] spin=308056ns gap_ewma=1948958ns wake_ewma=3783ns burn_ewma=257748ns waits=3250 blocks=3237 (99.6%) explores=26
+N=1 pipe    size=1048576  n=1250    gap=2000   rep=4
+N=1 unix    size=1048576  n=1250    gap=2000   rep=4
+N=1 zcring  size=1048576  n=1250    gap=2000   rep=5
+  pages=4k
+  learned[c0] spin=341512ns gap_ewma=1949583ns wake_ewma=3201ns burn_ewma=238093ns waits=3250 blocks=3240 (99.7%) explores=16
+N=1 pipe    size=1048576  n=1250    gap=2000   rep=5
+N=1 unix    size=1048576  n=1250    gap=2000   rep=5
+thermal gate: package at 88C, waiting for <60C...
+thermal gate: at 58C after 25s, C-states redisabled, continuing
+N=2 zcring  size=64       n=25000   gap=100    rep=1
+  pages=4k
+  learned[c0] spin=7795ns gap_ewma=96988ns wake_ewma=2853ns burn_ewma=14981ns waits=26923 blocks=26827 (99.6%) explores=213
+  learned[c1] spin=10934ns gap_ewma=96972ns wake_ewma=2881ns burn_ewma=12293ns waits=26902 blocks=26810 (99.7%) explores=211
+N=2 pipe    size=64       n=25000   gap=100    rep=1
+N=2 unix    size=64       n=25000   gap=100    rep=1
+N=2 zcring  size=64       n=25000   gap=100    rep=2
+  pages=4k
+  learned[c0] spin=8373ns gap_ewma=96987ns wake_ewma=2867ns burn_ewma=11472ns waits=26903 blocks=26811 (99.7%) explores=202
+  learned[c1] spin=10850ns gap_ewma=96988ns wake_ewma=2866ns burn_ewma=10945ns waits=26912 blocks=26840 (99.7%) explores=202
+N=2 pipe    size=64       n=25000   gap=100    rep=2
+N=2 unix    size=64       n=25000   gap=100    rep=2
+N=2 zcring  size=64       n=25000   gap=100    rep=3
+  pages=4k
+  learned[c0] spin=10570ns gap_ewma=96988ns wake_ewma=2845ns burn_ewma=12181ns waits=26877 blocks=26793 (99.7%) explores=191
+  learned[c1] spin=11655ns gap_ewma=96979ns wake_ewma=2867ns burn_ewma=12222ns waits=26934 blocks=26846 (99.7%) explores=191
+N=2 pipe    size=64       n=25000   gap=100    rep=3
+N=2 unix    size=64       n=25000   gap=100    rep=3
+N=2 zcring  size=64       n=25000   gap=100    rep=4
+  pages=4k
+  learned[c0] spin=9980ns gap_ewma=97008ns wake_ewma=2849ns burn_ewma=11839ns waits=26911 blocks=26821 (99.7%) explores=216
+  learned[c1] spin=13951ns gap_ewma=96960ns wake_ewma=2899ns burn_ewma=11915ns waits=26920 blocks=26838 (99.7%) explores=216
+N=2 pipe    size=64       n=25000   gap=100    rep=4
+N=2 unix    size=64       n=25000   gap=100    rep=4
+N=2 zcring  size=64       n=25000   gap=100    rep=5
+  pages=4k
+  learned[c0] spin=12912ns gap_ewma=102016ns wake_ewma=3720ns burn_ewma=14123ns waits=26910 blocks=26826 (99.7%) explores=235
+  learned[c1] spin=21066ns gap_ewma=111733ns wake_ewma=3963ns burn_ewma=13368ns waits=26897 blocks=26807 (99.7%) explores=235
+N=2 pipe    size=64       n=25000   gap=100    rep=5
+N=2 unix    size=64       n=25000   gap=100    rep=5
+thermal gate: package at 86C, waiting for <60C...
+thermal gate: at 59C after 15s, C-states redisabled, continuing
+N=2 zcring  size=256      n=25000   gap=100    rep=1
+  pages=4k
+  learned[c0] spin=12528ns gap_ewma=96960ns wake_ewma=2885ns burn_ewma=12051ns waits=26780 blocks=26697 (99.7%) explores=203
+  learned[c1] spin=12160ns gap_ewma=96942ns wake_ewma=2902ns burn_ewma=12105ns waits=26948 blocks=26861 (99.7%) explores=203
+N=2 pipe    size=256      n=25000   gap=100    rep=1
+N=2 unix    size=256      n=25000   gap=100    rep=1
+N=2 zcring  size=256      n=25000   gap=100    rep=2
+  pages=4k
+  learned[c0] spin=12554ns gap_ewma=96973ns wake_ewma=2869ns burn_ewma=12277ns waits=26906 blocks=26821 (99.7%) explores=219
+  learned[c1] spin=11647ns gap_ewma=96960ns wake_ewma=2880ns burn_ewma=12353ns waits=26912 blocks=26816 (99.6%) explores=219
+N=2 pipe    size=256      n=25000   gap=100    rep=2
+N=2 unix    size=256      n=25000   gap=100    rep=2
+N=2 zcring  size=256      n=25000   gap=100    rep=3
+  pages=4k
+  learned[c0] spin=12328ns gap_ewma=96990ns wake_ewma=2857ns burn_ewma=12013ns waits=26880 blocks=26804 (99.7%) explores=202
+  learned[c1] spin=16417ns gap_ewma=97017ns wake_ewma=2836ns burn_ewma=12407ns waits=26938 blocks=26856 (99.7%) explores=203
+N=2 pipe    size=256      n=25000   gap=100    rep=3
+N=2 unix    size=256      n=25000   gap=100    rep=3
+N=2 zcring  size=256      n=25000   gap=100    rep=4
+  pages=4k
+  learned[c0] spin=9464ns gap_ewma=97015ns wake_ewma=2858ns burn_ewma=11038ns waits=26926 blocks=26839 (99.7%) explores=209
+  learned[c1] spin=9485ns gap_ewma=96986ns wake_ewma=2854ns burn_ewma=10910ns waits=26922 blocks=26829 (99.7%) explores=209
+N=2 pipe    size=256      n=25000   gap=100    rep=4
+N=2 unix    size=256      n=25000   gap=100    rep=4
+N=2 zcring  size=256      n=25000   gap=100    rep=5
+  pages=4k
+  learned[c0] spin=52471ns gap_ewma=115703ns wake_ewma=52471ns burn_ewma=11820ns waits=26889 blocks=26803 (99.7%) explores=204
+  learned[c1] spin=11891ns gap_ewma=97303ns wake_ewma=4974ns burn_ewma=12214ns waits=26961 blocks=26885 (99.7%) explores=204
+N=2 pipe    size=256      n=25000   gap=100    rep=5
+N=2 unix    size=256      n=25000   gap=100    rep=5
+thermal gate: package at 86C, waiting for <60C...
+thermal gate: at 59C after 20s, C-states redisabled, continuing
+N=2 zcring  size=1024     n=25000   gap=100    rep=1
+  pages=4k
+  learned[c0] spin=11848ns gap_ewma=96935ns wake_ewma=2865ns burn_ewma=12911ns waits=26865 blocks=26772 (99.7%) explores=230
+  learned[c1] spin=10802ns gap_ewma=96994ns wake_ewma=2860ns burn_ewma=14099ns waits=26890 blocks=26795 (99.6%) explores=231
+N=2 pipe    size=1024     n=25000   gap=100    rep=1
+N=2 unix    size=1024     n=25000   gap=100    rep=1
+N=2 zcring  size=1024     n=25000   gap=100    rep=2
+  pages=4k
+  learned[c0] spin=13229ns gap_ewma=96944ns wake_ewma=2852ns burn_ewma=12106ns waits=26896 blocks=26812 (99.7%) explores=225
+  learned[c1] spin=11421ns gap_ewma=96937ns wake_ewma=2857ns burn_ewma=12149ns waits=26949 blocks=26860 (99.7%) explores=225
+N=2 pipe    size=1024     n=25000   gap=100    rep=2
+N=2 unix    size=1024     n=25000   gap=100    rep=2
+N=2 zcring  size=1024     n=25000   gap=100    rep=3
+  pages=4k
+  learned[c0] spin=8006ns gap_ewma=96924ns wake_ewma=2959ns burn_ewma=13263ns waits=26912 blocks=26824 (99.7%) explores=204
+  learned[c1] spin=6956ns gap_ewma=97931ns wake_ewma=4896ns burn_ewma=12516ns waits=26917 blocks=26844 (99.7%) explores=204
+N=2 pipe    size=1024     n=25000   gap=100    rep=3
+N=2 unix    size=1024     n=25000   gap=100    rep=3
+N=2 zcring  size=1024     n=25000   gap=100    rep=4
+  pages=4k
+  learned[c0] spin=8126ns gap_ewma=96975ns wake_ewma=2902ns burn_ewma=13462ns waits=26899 blocks=26828 (99.7%) explores=194
+  learned[c1] spin=12075ns gap_ewma=96945ns wake_ewma=2825ns burn_ewma=10704ns waits=26926 blocks=26856 (99.7%) explores=194
+N=2 pipe    size=1024     n=25000   gap=100    rep=4
+N=2 unix    size=1024     n=25000   gap=100    rep=4
+N=2 zcring  size=1024     n=25000   gap=100    rep=5
+  pages=4k
+  learned[c0] spin=8244ns gap_ewma=100546ns wake_ewma=3017ns burn_ewma=10998ns waits=26900 blocks=26805 (99.6%) explores=236
+  learned[c1] spin=15979ns gap_ewma=98000ns wake_ewma=3018ns burn_ewma=11660ns waits=26935 blocks=26846 (99.7%) explores=236
+N=2 pipe    size=1024     n=25000   gap=100    rep=5
+N=2 unix    size=1024     n=25000   gap=100    rep=5
+thermal gate: package at 83C, waiting for <60C...
+thermal gate: at 59C after 15s, C-states redisabled, continuing
+N=2 zcring  size=4096     n=25000   gap=100    rep=1
+  pages=4k
+  learned[c0] spin=6982ns gap_ewma=96740ns wake_ewma=2844ns burn_ewma=12487ns waits=26914 blocks=26811 (99.6%) explores=236
+  learned[c1] spin=8630ns gap_ewma=96734ns wake_ewma=2821ns burn_ewma=10912ns waits=26923 blocks=26826 (99.6%) explores=236
+N=2 pipe    size=4096     n=25000   gap=100    rep=1
+N=2 unix    size=4096     n=25000   gap=100    rep=1
+N=2 zcring  size=4096     n=25000   gap=100    rep=2
+  pages=4k
+  learned[c0] spin=9918ns gap_ewma=96670ns wake_ewma=2876ns burn_ewma=11831ns waits=26901 blocks=26813 (99.7%) explores=235
+  learned[c1] spin=12415ns gap_ewma=96663ns wake_ewma=2864ns burn_ewma=11592ns waits=26907 blocks=26821 (99.7%) explores=235
+N=2 pipe    size=4096     n=25000   gap=100    rep=2
+N=2 unix    size=4096     n=25000   gap=100    rep=2
+N=2 zcring  size=4096     n=25000   gap=100    rep=3
+  pages=4k
+  learned[c0] spin=12580ns gap_ewma=96488ns wake_ewma=3031ns burn_ewma=12008ns waits=26919 blocks=26835 (99.7%) explores=220
+  learned[c1] spin=11791ns gap_ewma=96484ns wake_ewma=3061ns burn_ewma=12085ns waits=26930 blocks=26838 (99.7%) explores=220
+N=2 pipe    size=4096     n=25000   gap=100    rep=3
+N=2 unix    size=4096     n=25000   gap=100    rep=3
+N=2 zcring  size=4096     n=25000   gap=100    rep=4
+  pages=4k
+  learned[c0] spin=15625ns gap_ewma=96668ns wake_ewma=2872ns burn_ewma=12361ns waits=26875 blocks=26780 (99.6%) explores=232
+  learned[c1] spin=15595ns gap_ewma=96653ns wake_ewma=2893ns burn_ewma=12360ns waits=26873 blocks=26768 (99.6%) explores=232
+N=2 pipe    size=4096     n=25000   gap=100    rep=4
+N=2 unix    size=4096     n=25000   gap=100    rep=4
+N=2 zcring  size=4096     n=25000   gap=100    rep=5
+  pages=4k
+  learned[c0] spin=11408ns gap_ewma=97520ns wake_ewma=3405ns burn_ewma=12370ns waits=26874 blocks=26785 (99.7%) explores=218
+  learned[c1] spin=15881ns gap_ewma=99166ns wake_ewma=2971ns burn_ewma=12600ns waits=26904 blocks=26826 (99.7%) explores=218
+N=2 pipe    size=4096     n=25000   gap=100    rep=5
+N=2 unix    size=4096     n=25000   gap=100    rep=5
+thermal gate: package at 87C, waiting for <60C...
+thermal gate: at 58C after 20s, C-states redisabled, continuing
+N=2 zcring  size=16384    n=25000   gap=100    rep=1
+  pages=4k
+  learned[c0] spin=12285ns gap_ewma=95550ns wake_ewma=2865ns burn_ewma=11943ns waits=26890 blocks=26795 (99.6%) explores=229
+  learned[c1] spin=10990ns gap_ewma=95567ns wake_ewma=2885ns burn_ewma=11950ns waits=26938 blocks=26834 (99.6%) explores=229
+N=2 pipe    size=16384    n=25000   gap=100    rep=1
+N=2 unix    size=16384    n=25000   gap=100    rep=1
+N=2 zcring  size=16384    n=25000   gap=100    rep=2
+  pages=4k
+  learned[c0] spin=12004ns gap_ewma=95558ns wake_ewma=2903ns burn_ewma=11779ns waits=26893 blocks=26798 (99.6%) explores=217
+  learned[c1] spin=7917ns gap_ewma=95557ns wake_ewma=2847ns burn_ewma=11255ns waits=26954 blocks=26835 (99.6%) explores=218
+N=2 pipe    size=16384    n=25000   gap=100    rep=2
+N=2 unix    size=16384    n=25000   gap=100    rep=2
+N=2 zcring  size=16384    n=25000   gap=100    rep=3
+  pages=4k
+  learned[c0] spin=7077ns gap_ewma=95567ns wake_ewma=2872ns burn_ewma=12297ns waits=26913 blocks=26823 (99.7%) explores=227
+  learned[c1] spin=15798ns gap_ewma=95567ns wake_ewma=2859ns burn_ewma=11617ns waits=26940 blocks=26854 (99.7%) explores=227
+N=2 pipe    size=16384    n=25000   gap=100    rep=3
+N=2 unix    size=16384    n=25000   gap=100    rep=3
+N=2 zcring  size=16384    n=25000   gap=100    rep=4
+  pages=4k
+  learned[c0] spin=10384ns gap_ewma=95441ns wake_ewma=3038ns burn_ewma=11981ns waits=26902 blocks=26802 (99.6%) explores=220
+  learned[c1] spin=10943ns gap_ewma=95439ns wake_ewma=3097ns burn_ewma=11770ns waits=26926 blocks=26832 (99.7%) explores=220
+N=2 pipe    size=16384    n=25000   gap=100    rep=4
+N=2 unix    size=16384    n=25000   gap=100    rep=4
+N=2 zcring  size=16384    n=25000   gap=100    rep=5
+  pages=4k
+  learned[c0] spin=15338ns gap_ewma=95580ns wake_ewma=2907ns burn_ewma=12239ns waits=26894 blocks=26819 (99.7%) explores=185
+  learned[c1] spin=13027ns gap_ewma=95572ns wake_ewma=2859ns burn_ewma=11713ns waits=26955 blocks=26865 (99.7%) explores=185
+N=2 pipe    size=16384    n=25000   gap=100    rep=5
+N=2 unix    size=16384    n=25000   gap=100    rep=5
+thermal gate: package at 85C, waiting for <60C...
+thermal gate: at 59C after 20s, C-states redisabled, continuing
+N=2 zcring  size=65536    n=25000   gap=124    rep=1
+  pages=4k
+  learned[c0] spin=15094ns gap_ewma=116590ns wake_ewma=3002ns burn_ewma=14718ns waits=26885 blocks=26815 (99.7%) explores=183
+  learned[c1] spin=15208ns gap_ewma=116622ns wake_ewma=2947ns burn_ewma=14568ns waits=26906 blocks=26822 (99.7%) explores=183
+N=2 pipe    size=65536    n=25000   gap=124    rep=1
+N=2 unix    size=65536    n=25000   gap=124    rep=1
+N=2 zcring  size=65536    n=25000   gap=124    rep=2
+  pages=4k
+  learned[c0] spin=13432ns gap_ewma=116660ns wake_ewma=2899ns burn_ewma=14431ns waits=26950 blocks=26881 (99.7%) explores=188
+  learned[c1] spin=13717ns gap_ewma=116661ns wake_ewma=2936ns burn_ewma=14768ns waits=26953 blocks=26877 (99.7%) explores=188
+N=2 pipe    size=65536    n=25000   gap=124    rep=2
+N=2 unix    size=65536    n=25000   gap=124    rep=2
+N=2 zcring  size=65536    n=25000   gap=124    rep=3
+  pages=4k
+  learned[c0] spin=10213ns gap_ewma=116687ns wake_ewma=2892ns burn_ewma=14659ns waits=26880 blocks=26784 (99.6%) explores=195
+  learned[c1] spin=14412ns gap_ewma=116686ns wake_ewma=2916ns burn_ewma=14502ns waits=26947 blocks=26860 (99.7%) explores=195
+N=2 pipe    size=65536    n=25000   gap=124    rep=3
+N=2 unix    size=65536    n=25000   gap=124    rep=3
+N=2 zcring  size=65536    n=25000   gap=124    rep=4
+  pages=4k
+  learned[c0] spin=11648ns gap_ewma=116663ns wake_ewma=2841ns burn_ewma=12993ns waits=26859 blocks=26780 (99.7%) explores=203
+  learned[c1] spin=13830ns gap_ewma=116665ns wake_ewma=2942ns burn_ewma=14940ns waits=26933 blocks=26825 (99.6%) explores=203
+N=2 pipe    size=65536    n=25000   gap=124    rep=4
+N=2 unix    size=65536    n=25000   gap=124    rep=4
+N=2 zcring  size=65536    n=25000   gap=124    rep=5
+  pages=4k
+  learned[c0] spin=14449ns gap_ewma=116633ns wake_ewma=2942ns burn_ewma=14652ns waits=26890 blocks=26811 (99.7%) explores=196
+  learned[c1] spin=13499ns gap_ewma=116634ns wake_ewma=2931ns burn_ewma=14593ns waits=26895 blocks=26804 (99.7%) explores=196
+N=2 pipe    size=65536    n=25000   gap=124    rep=5
+N=2 unix    size=65536    n=25000   gap=124    rep=5
+thermal gate: package at 88C, waiting for <60C...
+thermal gate: at 58C after 20s, C-states redisabled, continuing
+N=2 zcring  size=262144   n=2500    gap=500    rep=1
+  pages=4k
+  learned[c0] spin=51509ns gap_ewma=484212ns wake_ewma=3266ns burn_ewma=58793ns waits=4490 blocks=4471 (99.6%) explores=43
+  learned[c1] spin=40107ns gap_ewma=484213ns wake_ewma=3262ns burn_ewma=67571ns waits=4493 blocks=4467 (99.4%) explores=44
+N=2 pipe    size=262144   n=2500    gap=500    rep=1
+N=2 unix    size=262144   n=2500    gap=500    rep=1
+N=2 zcring  size=262144   n=2500    gap=500    rep=2
+  pages=4k
+  learned[c0] spin=56426ns gap_ewma=484249ns wake_ewma=3157ns burn_ewma=60252ns waits=4485 blocks=4466 (99.6%) explores=32
+  learned[c1] spin=54122ns gap_ewma=484242ns wake_ewma=3183ns burn_ewma=60770ns waits=4485 blocks=4467 (99.6%) explores=32
+N=2 pipe    size=262144   n=2500    gap=500    rep=2
+N=2 unix    size=262144   n=2500    gap=500    rep=2
+N=2 zcring  size=262144   n=2500    gap=500    rep=3
+  pages=4k
+  learned[c0] spin=79682ns gap_ewma=483365ns wake_ewma=3561ns burn_ewma=58509ns waits=4489 blocks=4465 (99.5%) explores=54
+  learned[c1] spin=84537ns gap_ewma=483365ns wake_ewma=3823ns burn_ewma=61009ns waits=4493 blocks=4464 (99.4%) explores=54
+N=2 pipe    size=262144   n=2500    gap=500    rep=3
+N=2 unix    size=262144   n=2500    gap=500    rep=3
+N=2 zcring  size=262144   n=2500    gap=500    rep=4
+  pages=4k
+  learned[c0] spin=38899ns gap_ewma=484206ns wake_ewma=3259ns burn_ewma=60580ns waits=4489 blocks=4475 (99.7%) explores=42
+  learned[c1] spin=46860ns gap_ewma=484206ns wake_ewma=3226ns burn_ewma=74419ns waits=4494 blocks=4479 (99.7%) explores=43
+N=2 pipe    size=262144   n=2500    gap=500    rep=4
+N=2 unix    size=262144   n=2500    gap=500    rep=4
+N=2 zcring  size=262144   n=2500    gap=500    rep=5
+  pages=4k
+  learned[c0] spin=44089ns gap_ewma=484253ns wake_ewma=3263ns burn_ewma=54734ns waits=4487 blocks=4466 (99.5%) explores=42
+  learned[c1] spin=46170ns gap_ewma=484271ns wake_ewma=3193ns burn_ewma=54737ns waits=4491 blocks=4473 (99.6%) explores=42
+N=2 pipe    size=262144   n=2500    gap=500    rep=5
+N=2 unix    size=262144   n=2500    gap=500    rep=5
+thermal gate: package at 84C, waiting for <60C...
+thermal gate: at 59C after 15s, C-states redisabled, continuing
+N=2 zcring  size=1048576  n=625     gap=2000   rep=1
+  pages=4k
+  learned[c0] spin=148614ns gap_ewma=1948668ns wake_ewma=4044ns burn_ewma=252692ns waits=2624 blocks=2617 (99.7%) explores=20
+  learned[c1] spin=143188ns gap_ewma=1948517ns wake_ewma=4284ns burn_ewma=248241ns waits=2625 blocks=2620 (99.8%) explores=20
+N=2 pipe    size=1048576  n=625     gap=2000   rep=1
+N=2 unix    size=1048576  n=625     gap=2000   rep=1
+N=2 zcring  size=1048576  n=625     gap=2000   rep=2
+  pages=4k
+  learned[c0] spin=238010ns gap_ewma=1948855ns wake_ewma=4044ns burn_ewma=243845ns waits=2624 blocks=2622 (99.9%) explores=11
+  learned[c1] spin=261940ns gap_ewma=1948870ns wake_ewma=3994ns burn_ewma=241770ns waits=2625 blocks=2619 (99.8%) explores=11
+N=2 pipe    size=1048576  n=625     gap=2000   rep=2
+N=2 unix    size=1048576  n=625     gap=2000   rep=2
+N=2 zcring  size=1048576  n=625     gap=2000   rep=3
+  pages=4k
+  learned[c0] spin=210779ns gap_ewma=1948764ns wake_ewma=3977ns burn_ewma=246014ns waits=2625 blocks=2613 (99.5%) explores=27
+  learned[c1] spin=232935ns gap_ewma=1948803ns wake_ewma=3953ns burn_ewma=240658ns waits=2625 blocks=2614 (99.6%) explores=27
+N=2 pipe    size=1048576  n=625     gap=2000   rep=3
+N=2 unix    size=1048576  n=625     gap=2000   rep=3
+N=2 zcring  size=1048576  n=625     gap=2000   rep=4
+  pages=4k
+  learned[c0] spin=226018ns gap_ewma=1948898ns wake_ewma=3935ns burn_ewma=255318ns waits=2625 blocks=2614 (99.6%) explores=16
+  learned[c1] spin=219803ns gap_ewma=1948926ns wake_ewma=3965ns burn_ewma=255269ns waits=2625 blocks=2616 (99.7%) explores=16
+N=2 pipe    size=1048576  n=625     gap=2000   rep=4
+N=2 unix    size=1048576  n=625     gap=2000   rep=4
+N=2 zcring  size=1048576  n=625     gap=2000   rep=5
+  pages=4k
+  learned[c0] spin=289157ns gap_ewma=1948578ns wake_ewma=4036ns burn_ewma=241788ns waits=2625 blocks=2618 (99.7%) explores=14
+  learned[c1] spin=224552ns gap_ewma=1948615ns wake_ewma=4038ns burn_ewma=239377ns waits=2624 blocks=2617 (99.7%) explores=14
+N=2 pipe    size=1048576  n=625     gap=2000   rep=5
+N=2 unix    size=1048576  n=625     gap=2000   rep=5
+thermal gate: package at 87C, waiting for <60C...
+thermal gate: at 58C after 20s, C-states redisabled, continuing
+N=4 zcring  size=64       n=12500   gap=100    rep=1
+  pages=4k
+  learned[c0] spin=20907ns gap_ewma=81510ns wake_ewma=20907ns burn_ewma=18354ns waits=14429 blocks=14308 (99.2%) explores=111
+  learned[c1] spin=12156ns gap_ewma=95187ns wake_ewma=4650ns burn_ewma=11911ns waits=14486 blocks=14435 (99.6%) explores=111
+  learned[c2] spin=11824ns gap_ewma=95145ns wake_ewma=4703ns burn_ewma=11853ns waits=14428 blocks=14361 (99.5%) explores=111
+  learned[c3] spin=20978ns gap_ewma=81453ns wake_ewma=20978ns burn_ewma=18444ns waits=14436 blocks=14286 (99.0%) explores=111
+N=4 pipe    size=64       n=12500   gap=100    rep=1
+N=4 unix    size=64       n=12500   gap=100    rep=1
+N=4 zcring  size=64       n=12500   gap=100    rep=2
+  pages=4k
+  learned[c0] spin=10486ns gap_ewma=94155ns wake_ewma=5662ns burn_ewma=12373ns waits=14430 blocks=14360 (99.5%) explores=117
+  learned[c1] spin=9093ns gap_ewma=95101ns wake_ewma=4787ns burn_ewma=11915ns waits=14469 blocks=14384 (99.4%) explores=117
+  learned[c2] spin=19062ns gap_ewma=82874ns wake_ewma=19062ns burn_ewma=17068ns waits=14431 blocks=14291 (99.0%) explores=117
+  learned[c3] spin=20262ns gap_ewma=81582ns wake_ewma=20262ns burn_ewma=18205ns waits=14469 blocks=14331 (99.0%) explores=117
+N=4 pipe    size=64       n=12500   gap=100    rep=2
+N=4 unix    size=64       n=12500   gap=100    rep=2
+N=4 zcring  size=64       n=12500   gap=100    rep=3
+  pages=4k
+  learned[c0] spin=12112ns gap_ewma=95149ns wake_ewma=4698ns burn_ewma=11841ns waits=14417 blocks=14348 (99.5%) explores=118
+  learned[c1] spin=20328ns gap_ewma=81474ns wake_ewma=20328ns burn_ewma=18121ns waits=14455 blocks=14331 (99.1%) explores=118
+  learned[c2] spin=20227ns gap_ewma=81571ns wake_ewma=20227ns burn_ewma=18196ns waits=14418 blocks=14283 (99.1%) explores=118
+  learned[c3] spin=10706ns gap_ewma=95144ns wake_ewma=4671ns burn_ewma=11958ns waits=14454 blocks=14363 (99.4%) explores=118
+N=4 pipe    size=64       n=12500   gap=100    rep=3
+N=4 unix    size=64       n=12500   gap=100    rep=3
+N=4 zcring  size=64       n=12500   gap=100    rep=4
+  pages=4k
+  learned[c0] spin=15464ns gap_ewma=94568ns wake_ewma=5273ns burn_ewma=11303ns waits=14438 blocks=14381 (99.6%) explores=99
+  learned[c1] spin=8151ns gap_ewma=94778ns wake_ewma=8151ns burn_ewma=12662ns waits=14407 blocks=14351 (99.6%) explores=99
+  learned[c2] spin=20057ns gap_ewma=82695ns wake_ewma=20057ns burn_ewma=17703ns waits=14438 blocks=14328 (99.2%) explores=99
+  learned[c3] spin=17107ns gap_ewma=84074ns wake_ewma=17107ns burn_ewma=18470ns waits=14406 blocks=14297 (99.2%) explores=98
+N=4 pipe    size=64       n=12500   gap=100    rep=4
+N=4 unix    size=64       n=12500   gap=100    rep=4
+N=4 zcring  size=64       n=12500   gap=100    rep=5
+  pages=4k
+  learned[c0] spin=11990ns gap_ewma=95128ns wake_ewma=4708ns burn_ewma=11877ns waits=14428 blocks=14378 (99.7%) explores=110
+  learned[c1] spin=20872ns gap_ewma=81418ns wake_ewma=20872ns burn_ewma=18296ns waits=14421 blocks=14325 (99.3%) explores=110
+  learned[c2] spin=20831ns gap_ewma=81445ns wake_ewma=20831ns burn_ewma=18438ns waits=14428 blocks=14285 (99.0%) explores=110
+  learned[c3] spin=12695ns gap_ewma=95079ns wake_ewma=4762ns burn_ewma=11913ns waits=14420 blocks=14336 (99.4%) explores=110
+N=4 pipe    size=64       n=12500   gap=100    rep=5
+N=4 unix    size=64       n=12500   gap=100    rep=5
+thermal gate: package at 83C, waiting for <60C...
+thermal gate: at 58C after 15s, C-states redisabled, continuing
+N=4 zcring  size=256      n=12500   gap=100    rep=1
+  pages=4k
+  learned[c0] spin=19600ns gap_ewma=85145ns wake_ewma=19600ns burn_ewma=18082ns waits=14421 blocks=14253 (98.8%) explores=124
+  learned[c1] spin=12811ns gap_ewma=95178ns wake_ewma=4658ns burn_ewma=11978ns waits=14423 blocks=14355 (99.5%) explores=124
+  learned[c2] spin=7739ns gap_ewma=94348ns wake_ewma=5559ns burn_ewma=12852ns waits=14469 blocks=14410 (99.6%) explores=125
+  learned[c3] spin=20906ns gap_ewma=81692ns wake_ewma=20906ns burn_ewma=17920ns waits=14424 blocks=14285 (99.0%) explores=124
+N=4 pipe    size=256      n=12500   gap=100    rep=1
+N=4 unix    size=256      n=12500   gap=100    rep=1
+N=4 zcring  size=256      n=12500   gap=100    rep=2
+  pages=4k
+  learned[c0] spin=12833ns gap_ewma=95235ns wake_ewma=7619ns burn_ewma=12557ns waits=14394 blocks=14338 (99.6%) explores=128
+  learned[c1] spin=19001ns gap_ewma=86635ns wake_ewma=19001ns burn_ewma=17974ns waits=14430 blocks=14318 (99.2%) explores=128
+  learned[c2] spin=22855ns gap_ewma=81729ns wake_ewma=22855ns burn_ewma=21664ns waits=14395 blocks=14228 (98.8%) explores=128
+  learned[c3] spin=6191ns gap_ewma=95291ns wake_ewma=6191ns burn_ewma=12526ns waits=14431 blocks=14311 (99.2%) explores=128
+N=4 pipe    size=256      n=12500   gap=100    rep=2
+N=4 unix    size=256      n=12500   gap=100    rep=2
+N=4 zcring  size=256      n=12500   gap=100    rep=3
+  pages=4k
+  learned[c0] spin=20520ns gap_ewma=81590ns wake_ewma=20520ns burn_ewma=18222ns waits=13941 blocks=13750 (98.6%) explores=119
+  learned[c1] spin=19285ns gap_ewma=83150ns wake_ewma=19285ns burn_ewma=17716ns waits=13779 blocks=13573 (98.5%) explores=118
+  learned[c2] spin=11342ns gap_ewma=95178ns wake_ewma=4669ns burn_ewma=11903ns waits=13940 blocks=13797 (99.0%) explores=119
+  learned[c3] spin=14299ns gap_ewma=94984ns wake_ewma=4886ns burn_ewma=11495ns waits=13821 blocks=13695 (99.1%) explores=119
+N=4 pipe    size=256      n=12500   gap=100    rep=3
+N=4 unix    size=256      n=12500   gap=100    rep=3
+N=4 zcring  size=256      n=12500   gap=100    rep=4
+  pages=4k
+  learned[c0] spin=21151ns gap_ewma=81596ns wake_ewma=21151ns burn_ewma=18384ns waits=14370 blocks=14212 (98.9%) explores=115
+  learned[c1] spin=10270ns gap_ewma=95185ns wake_ewma=4655ns burn_ewma=11864ns waits=14364 blocks=14285 (99.5%) explores=115
+  learned[c2] spin=11327ns gap_ewma=95200ns wake_ewma=4635ns burn_ewma=11819ns waits=14430 blocks=14370 (99.6%) explores=115
+  learned[c3] spin=21106ns gap_ewma=81607ns wake_ewma=21106ns burn_ewma=18115ns waits=14365 blocks=14214 (98.9%) explores=115
+N=4 pipe    size=256      n=12500   gap=100    rep=4
+N=4 unix    size=256      n=12500   gap=100    rep=4
+N=4 zcring  size=256      n=12500   gap=100    rep=5
+  pages=4k
+  learned[c0] spin=19827ns gap_ewma=82863ns wake_ewma=19827ns burn_ewma=17271ns waits=14420 blocks=14320 (99.3%) explores=122
+  learned[c1] spin=20532ns gap_ewma=82122ns wake_ewma=20532ns burn_ewma=17894ns waits=14426 blocks=14284 (99.0%) explores=122
+  learned[c2] spin=11907ns gap_ewma=94696ns wake_ewma=5119ns burn_ewma=11365ns waits=14419 blocks=14297 (99.2%) explores=122
+  learned[c3] spin=14045ns gap_ewma=94875ns wake_ewma=4981ns burn_ewma=11589ns waits=14426 blocks=14356 (99.5%) explores=122
+N=4 pipe    size=256      n=12500   gap=100    rep=5
+N=4 unix    size=256      n=12500   gap=100    rep=5
+thermal gate: package at 83C, waiting for <60C...
+thermal gate: at 58C after 10s, C-states redisabled, continuing
+N=4 zcring  size=1024     n=12500   gap=100    rep=1
+  pages=4k
+  learned[c0] spin=22292ns gap_ewma=81393ns wake_ewma=22292ns burn_ewma=18461ns waits=14399 blocks=14266 (99.1%) explores=109
+  learned[c1] spin=22342ns gap_ewma=81331ns wake_ewma=22342ns burn_ewma=18492ns waits=14440 blocks=14312 (99.1%) explores=109
+  learned[c2] spin=11327ns gap_ewma=95153ns wake_ewma=4600ns burn_ewma=11911ns waits=14400 blocks=14351 (99.7%) explores=109
+  learned[c3] spin=12176ns gap_ewma=95129ns wake_ewma=4664ns burn_ewma=11951ns waits=14439 blocks=14376 (99.6%) explores=109
+N=4 pipe    size=1024     n=12500   gap=100    rep=1
+N=4 unix    size=1024     n=12500   gap=100    rep=1
+N=4 zcring  size=1024     n=12500   gap=100    rep=2
+  pages=4k
+  learned[c0] spin=22210ns gap_ewma=81490ns wake_ewma=22210ns burn_ewma=18087ns waits=14395 blocks=14297 (99.3%) explores=139
+  learned[c1] spin=21199ns gap_ewma=82715ns wake_ewma=21199ns burn_ewma=17422ns waits=14357 blocks=14187 (98.8%) explores=139
+  learned[c2] spin=13036ns gap_ewma=95057ns wake_ewma=4742ns burn_ewma=12017ns waits=14394 blocks=14261 (99.1%) explores=139
+  learned[c3] spin=13433ns gap_ewma=94711ns wake_ewma=5037ns burn_ewma=11422ns waits=14358 blocks=14294 (99.6%) explores=139
+N=4 pipe    size=1024     n=12500   gap=100    rep=2
+N=4 unix    size=1024     n=12500   gap=100    rep=2
+N=4 zcring  size=1024     n=12500   gap=100    rep=3
+  pages=4k
+  learned[c0] spin=11968ns gap_ewma=95055ns wake_ewma=4759ns burn_ewma=10654ns waits=14370 blocks=14290 (99.4%) explores=106
+  learned[c1] spin=20309ns gap_ewma=85873ns wake_ewma=20309ns burn_ewma=18143ns waits=14387 blocks=14237 (99.0%) explores=106
+  learned[c2] spin=19722ns gap_ewma=83755ns wake_ewma=19722ns burn_ewma=17970ns waits=14371 blocks=14288 (99.4%) explores=106
+  learned[c3] spin=11854ns gap_ewma=93818ns wake_ewma=6088ns burn_ewma=13939ns waits=14432 blocks=14382 (99.7%) explores=107
+N=4 pipe    size=1024     n=12500   gap=100    rep=3
+N=4 unix    size=1024     n=12500   gap=100    rep=3
+N=4 zcring  size=1024     n=12500   gap=100    rep=4
+  pages=4k
+  learned[c0] spin=12147ns gap_ewma=95089ns wake_ewma=4661ns burn_ewma=11832ns waits=14361 blocks=14325 (99.7%) explores=104
+  learned[c1] spin=11076ns gap_ewma=95084ns wake_ewma=4681ns burn_ewma=11982ns waits=14439 blocks=14361 (99.5%) explores=104
+  learned[c2] spin=21763ns gap_ewma=81470ns wake_ewma=21763ns burn_ewma=18486ns waits=14360 blocks=14239 (99.2%) explores=104
+  learned[c3] spin=21897ns gap_ewma=81296ns wake_ewma=21897ns burn_ewma=18516ns waits=14440 blocks=14327 (99.2%) explores=104
+N=4 pipe    size=1024     n=12500   gap=100    rep=4
+N=4 unix    size=1024     n=12500   gap=100    rep=4
+N=4 zcring  size=1024     n=12500   gap=100    rep=5
+  pages=4k
+  learned[c0] spin=21507ns gap_ewma=82201ns wake_ewma=21507ns burn_ewma=18348ns waits=14342 blocks=14194 (99.0%) explores=132
+  learned[c1] spin=8952ns gap_ewma=93618ns wake_ewma=6172ns burn_ewma=12004ns waits=14417 blocks=14297 (99.2%) explores=133
+  learned[c2] spin=9849ns gap_ewma=95596ns wake_ewma=5196ns burn_ewma=12391ns waits=14342 blocks=14260 (99.4%) explores=132
+  learned[c3] spin=19981ns gap_ewma=83705ns wake_ewma=19981ns burn_ewma=16848ns waits=14394 blocks=14272 (99.2%) explores=133
+N=4 pipe    size=1024     n=12500   gap=100    rep=5
+N=4 unix    size=1024     n=12500   gap=100    rep=5
+thermal gate: package at 82C, waiting for <60C...
+thermal gate: at 58C after 10s, C-states redisabled, continuing
+N=4 zcring  size=4096     n=12500   gap=100    rep=1
+  pages=4k
+  learned[c0] spin=24269ns gap_ewma=85284ns wake_ewma=24269ns burn_ewma=17749ns waits=14402 blocks=14269 (99.1%) explores=116
+  learned[c1] spin=25094ns gap_ewma=83283ns wake_ewma=25094ns burn_ewma=16840ns waits=14453 blocks=14382 (99.5%) explores=116
+  learned[c2] spin=10833ns gap_ewma=95782ns wake_ewma=4963ns burn_ewma=11041ns waits=14403 blocks=14357 (99.7%) explores=116
+  learned[c3] spin=9416ns gap_ewma=94091ns wake_ewma=5451ns burn_ewma=11514ns waits=14440 blocks=14314 (99.1%) explores=116
+N=4 pipe    size=4096     n=12500   gap=100    rep=1
+N=4 unix    size=4096     n=12500   gap=100    rep=1
+N=4 zcring  size=4096     n=12500   gap=100    rep=2
+  pages=4k
+  learned[c0] spin=20463ns gap_ewma=79494ns wake_ewma=20463ns burn_ewma=18358ns waits=14383 blocks=14243 (99.0%) explores=107
+  learned[c1] spin=9207ns gap_ewma=96066ns wake_ewma=4897ns burn_ewma=10876ns waits=14449 blocks=14392 (99.6%) explores=108
+  learned[c2] spin=13327ns gap_ewma=94279ns wake_ewma=13327ns burn_ewma=14160ns waits=14426 blocks=14378 (99.7%) explores=108
+  learned[c3] spin=25317ns gap_ewma=82752ns wake_ewma=25317ns burn_ewma=19905ns waits=14449 blocks=14327 (99.2%) explores=108
+N=4 pipe    size=4096     n=12500   gap=100    rep=2
+N=4 unix    size=4096     n=12500   gap=100    rep=2
+N=4 zcring  size=4096     n=12500   gap=100    rep=3
+  pages=4k
+  learned[c0] spin=25901ns gap_ewma=82114ns wake_ewma=25901ns burn_ewma=20101ns waits=14397 blocks=14253 (99.0%) explores=123
+  learned[c1] spin=14746ns gap_ewma=94889ns wake_ewma=5132ns burn_ewma=11114ns waits=14447 blocks=14378 (99.5%) explores=124
+  learned[c2] spin=9236ns gap_ewma=94590ns wake_ewma=5138ns burn_ewma=13459ns waits=14396 blocks=14335 (99.6%) explores=123
+  learned[c3] spin=25441ns gap_ewma=82483ns wake_ewma=25441ns burn_ewma=18632ns waits=14447 blocks=14308 (99.0%) explores=124
+N=4 pipe    size=4096     n=12500   gap=100    rep=3
+N=4 unix    size=4096     n=12500   gap=100    rep=3
+N=4 zcring  size=4096     n=12500   gap=100    rep=4
+  pages=4k
+  learned[c0] spin=26529ns gap_ewma=81243ns wake_ewma=26529ns burn_ewma=18636ns waits=14366 blocks=14234 (99.1%) explores=107
+  learned[c1] spin=13884ns gap_ewma=95350ns wake_ewma=4744ns burn_ewma=12514ns waits=14443 blocks=14391 (99.6%) explores=108
+  learned[c2] spin=11509ns gap_ewma=94878ns wake_ewma=4656ns burn_ewma=11850ns waits=14367 blocks=14323 (99.7%) explores=107
+  learned[c3] spin=27193ns gap_ewma=80794ns wake_ewma=27193ns burn_ewma=18960ns waits=14443 blocks=14315 (99.1%) explores=108
+N=4 pipe    size=4096     n=12500   gap=100    rep=4
+N=4 unix    size=4096     n=12500   gap=100    rep=4
+N=4 zcring  size=4096     n=12500   gap=100    rep=5
+  pages=4k
+  learned[c0] spin=26204ns gap_ewma=81670ns wake_ewma=26204ns burn_ewma=18483ns waits=14331 blocks=14192 (99.0%) explores=101
+  learned[c1] spin=24687ns gap_ewma=83065ns wake_ewma=24687ns burn_ewma=16845ns waits=14354 blocks=14218 (99.1%) explores=101
+  learned[c2] spin=10439ns gap_ewma=94910ns wake_ewma=5142ns burn_ewma=12087ns waits=14384 blocks=14327 (99.6%) explores=101
+  learned[c3] spin=8464ns gap_ewma=93243ns wake_ewma=6250ns burn_ewma=12017ns waits=14353 blocks=14304 (99.7%) explores=101
+N=4 pipe    size=4096     n=12500   gap=100    rep=5
+N=4 unix    size=4096     n=12500   gap=100    rep=5
+thermal gate: package at 81C, waiting for <60C...
+thermal gate: at 59C after 5s, C-states redisabled, continuing
+N=4 zcring  size=16384    n=12500   gap=100    rep=1
+  pages=4k
+  learned[c0] spin=42141ns gap_ewma=81941ns wake_ewma=42141ns burn_ewma=18800ns waits=14415 blocks=14348 (99.5%) explores=119
+  learned[c1] spin=10845ns gap_ewma=93945ns wake_ewma=5398ns burn_ewma=10599ns waits=14421 blocks=14356 (99.5%) explores=119
+  learned[c2] spin=9975ns gap_ewma=92768ns wake_ewma=5752ns burn_ewma=10641ns waits=14415 blocks=14283 (99.1%) explores=119
+  learned[c3] spin=41964ns gap_ewma=82339ns wake_ewma=41964ns burn_ewma=19193ns waits=14421 blocks=14287 (99.1%) explores=119
+N=4 pipe    size=16384    n=12500   gap=100    rep=1
+N=4 unix    size=16384    n=12500   gap=100    rep=1
+N=4 zcring  size=16384    n=12500   gap=100    rep=2
+  pages=4k
+  learned[c0] spin=42920ns gap_ewma=80943ns wake_ewma=42920ns burn_ewma=19263ns waits=14403 blocks=14296 (99.3%) explores=88
+  learned[c1] spin=11614ns gap_ewma=93386ns wake_ewma=5031ns burn_ewma=11184ns waits=14409 blocks=14381 (99.8%) explores=88
+  learned[c2] spin=12504ns gap_ewma=94028ns wake_ewma=4777ns burn_ewma=11420ns waits=14404 blocks=14356 (99.7%) explores=88
+  learned[c3] spin=42537ns gap_ewma=81323ns wake_ewma=42537ns burn_ewma=19022ns waits=14382 blocks=14244 (99.0%) explores=88
+N=4 pipe    size=16384    n=12500   gap=100    rep=2
+N=4 unix    size=16384    n=12500   gap=100    rep=2
+N=4 zcring  size=16384    n=12500   gap=100    rep=3
+  pages=4k
+  learned[c0] spin=10179ns gap_ewma=93259ns wake_ewma=5198ns burn_ewma=12146ns waits=14368 blocks=14308 (99.6%) explores=121
+  learned[c1] spin=12128ns gap_ewma=93960ns wake_ewma=4701ns burn_ewma=11616ns waits=14423 blocks=14372 (99.6%) explores=121
+  learned[c2] spin=42918ns gap_ewma=81183ns wake_ewma=42918ns burn_ewma=18666ns waits=14367 blocks=14221 (99.0%) explores=121
+  learned[c3] spin=43207ns gap_ewma=80495ns wake_ewma=43207ns burn_ewma=19271ns waits=14422 blocks=14282 (99.0%) explores=121
+N=4 pipe    size=16384    n=12500   gap=100    rep=3
+N=4 unix    size=16384    n=12500   gap=100    rep=3
+N=4 zcring  size=16384    n=12500   gap=100    rep=4
+  pages=4k
+  learned[c0] spin=12197ns gap_ewma=101929ns wake_ewma=9427ns burn_ewma=15870ns waits=14414 blocks=14360 (99.6%) explores=129
+  learned[c1] spin=43090ns gap_ewma=79683ns wake_ewma=43090ns burn_ewma=20005ns waits=14398 blocks=14255 (99.0%) explores=128
+  learned[c2] spin=45246ns gap_ewma=95498ns wake_ewma=45246ns burn_ewma=21475ns waits=14360 blocks=14187 (98.8%) explores=128
+  learned[c3] spin=11209ns gap_ewma=93444ns wake_ewma=5111ns burn_ewma=11650ns waits=14398 blocks=14325 (99.5%) explores=128
+N=4 pipe    size=16384    n=12500   gap=100    rep=4
+N=4 unix    size=16384    n=12500   gap=100    rep=4
+N=4 zcring  size=16384    n=12500   gap=100    rep=5
+  pages=4k
+  learned[c0] spin=43511ns gap_ewma=79891ns wake_ewma=43511ns burn_ewma=20098ns waits=14288 blocks=14129 (98.9%) explores=110
+  learned[c1] spin=43419ns gap_ewma=80032ns wake_ewma=43419ns burn_ewma=20073ns waits=14373 blocks=14250 (99.1%) explores=110
+  learned[c2] spin=11690ns gap_ewma=93506ns wake_ewma=4953ns burn_ewma=11643ns waits=14330 blocks=14271 (99.6%) explores=110
+  learned[c3] spin=12291ns gap_ewma=93498ns wake_ewma=4946ns burn_ewma=11517ns waits=14374 blocks=14305 (99.5%) explores=110
+N=4 pipe    size=16384    n=12500   gap=100    rep=5
+N=4 unix    size=16384    n=12500   gap=100    rep=5
+thermal gate: package at 80C, waiting for <60C...
+thermal gate: at 57C after 10s, C-states redisabled, continuing
+N=4 zcring  size=65536    n=12500   gap=124    rep=1
+  pages=4k
+  learned[c0] spin=103748ns gap_ewma=97897ns wake_ewma=103748ns burn_ewma=25367ns waits=14393 blocks=14236 (98.9%) explores=107
+  learned[c1] spin=103654ns gap_ewma=97994ns wake_ewma=103654ns burn_ewma=25189ns waits=14357 blocks=14202 (98.9%) explores=107
+  learned[c2] spin=12816ns gap_ewma=114886ns wake_ewma=4818ns burn_ewma=14430ns waits=14435 blocks=14390 (99.7%) explores=107
+  learned[c3] spin=14661ns gap_ewma=114888ns wake_ewma=4826ns burn_ewma=14332ns waits=14403 blocks=14350 (99.6%) explores=107
+N=4 pipe    size=65536    n=12500   gap=124    rep=1
+N=4 unix    size=65536    n=12500   gap=124    rep=1
+N=4 zcring  size=65536    n=12500   gap=124    rep=2
+  pages=4k
+  learned[c0] spin=13036ns gap_ewma=114377ns wake_ewma=5420ns burn_ewma=13831ns waits=14427 blocks=14371 (99.6%) explores=99
+  learned[c1] spin=109385ns gap_ewma=99204ns wake_ewma=109385ns burn_ewma=24309ns waits=14428 blocks=14310 (99.2%) explores=99
+  learned[c2] spin=109263ns gap_ewma=99287ns wake_ewma=109263ns burn_ewma=24233ns waits=14428 blocks=14311 (99.2%) explores=99
+  learned[c3] spin=11491ns gap_ewma=114361ns wake_ewma=5440ns burn_ewma=13961ns waits=14427 blocks=14364 (99.6%) explores=99
+N=4 pipe    size=65536    n=12500   gap=124    rep=2
+N=4 unix    size=65536    n=12500   gap=124    rep=2
+N=4 zcring  size=65536    n=12500   gap=124    rep=3
+  pages=4k
+  learned[c0] spin=18538ns gap_ewma=112806ns wake_ewma=7231ns burn_ewma=14853ns waits=14454 blocks=14395 (99.6%) explores=100
+  learned[c1] spin=24381ns gap_ewma=98881ns wake_ewma=24381ns burn_ewma=25846ns waits=14406 blocks=14260 (99.0%) explores=100
+  learned[c2] spin=102420ns gap_ewma=99515ns wake_ewma=102420ns burn_ewma=24885ns waits=14433 blocks=14311 (99.2%) explores=100
+  learned[c3] spin=85092ns gap_ewma=113905ns wake_ewma=85092ns burn_ewma=14352ns waits=14451 blocks=14413 (99.7%) explores=100
+N=4 pipe    size=65536    n=12500   gap=124    rep=3
+N=4 unix    size=65536    n=12500   gap=124    rep=3
+N=4 zcring  size=65536    n=12500   gap=124    rep=4
+  pages=4k
+  learned[c0] spin=12130ns gap_ewma=112549ns wake_ewma=7991ns burn_ewma=13218ns waits=14398 blocks=14338 (99.6%) explores=126
+  learned[c1] spin=108584ns gap_ewma=98981ns wake_ewma=108584ns burn_ewma=25157ns waits=14418 blocks=14273 (99.0%) explores=126
+  learned[c2] spin=52110ns gap_ewma=103311ns wake_ewma=52110ns burn_ewma=19390ns waits=14398 blocks=14247 (99.0%) explores=126
+  learned[c3] spin=13050ns gap_ewma=114702ns wake_ewma=5426ns burn_ewma=14363ns waits=14419 blocks=14356 (99.6%) explores=126
+N=4 pipe    size=65536    n=12500   gap=124    rep=4
+N=4 unix    size=65536    n=12500   gap=124    rep=4
+N=4 zcring  size=65536    n=12500   gap=124    rep=5
+  pages=4k
+  learned[c0] spin=100582ns gap_ewma=101854ns wake_ewma=100582ns burn_ewma=25758ns waits=14393 blocks=14251 (99.0%) explores=99
+  learned[c1] spin=99795ns gap_ewma=101952ns wake_ewma=99795ns burn_ewma=24154ns waits=14418 blocks=14305 (99.2%) explores=99
+  learned[c2] spin=19622ns gap_ewma=112810ns wake_ewma=7219ns burn_ewma=13521ns waits=14430 blocks=14395 (99.8%) explores=99
+  learned[c3] spin=14121ns gap_ewma=114660ns wake_ewma=5232ns burn_ewma=12083ns waits=14417 blocks=14346 (99.5%) explores=99
+N=4 pipe    size=65536    n=12500   gap=124    rep=5
+N=4 unix    size=65536    n=12500   gap=124    rep=5
+thermal gate: package at 79C, waiting for <60C...
+thermal gate: at 59C after 5s, C-states redisabled, continuing
+N=4 zcring  size=262144   n=1250    gap=500    rep=1
+  pages=4k
+  learned[c0] spin=48270ns gap_ewma=451340ns wake_ewma=40113ns burn_ewma=57049ns waits=3238 blocks=3225 (99.6%) explores=23
+  learned[c1] spin=51658ns gap_ewma=450712ns wake_ewma=40857ns burn_ewma=57291ns waits=3244 blocks=3228 (99.5%) explores=23
+  learned[c2] spin=121758ns gap_ewma=455022ns wake_ewma=121758ns burn_ewma=56227ns waits=3238 blocks=3219 (99.4%) explores=23
+  learned[c3] spin=120886ns gap_ewma=455898ns wake_ewma=120886ns burn_ewma=56514ns waits=3242 blocks=3229 (99.6%) explores=23
+N=4 pipe    size=262144   n=1250    gap=500    rep=1
+N=4 unix    size=262144   n=1250    gap=500    rep=1
+N=4 zcring  size=262144   n=1250    gap=500    rep=2
+  pages=4k
+  learned[c0] spin=58378ns gap_ewma=451747ns wake_ewma=39744ns burn_ewma=57175ns waits=3235 blocks=3216 (99.4%) explores=29
+  learned[c1] spin=115732ns gap_ewma=454083ns wake_ewma=115732ns burn_ewma=55936ns waits=3238 blocks=3216 (99.3%) explores=29
+  learned[c2] spin=115722ns gap_ewma=454285ns wake_ewma=115722ns burn_ewma=56685ns waits=3236 blocks=3216 (99.4%) explores=29
+  learned[c3] spin=56678ns gap_ewma=451730ns wake_ewma=39686ns burn_ewma=56135ns waits=3239 blocks=3223 (99.5%) explores=29
+N=4 pipe    size=262144   n=1250    gap=500    rep=2
+N=4 unix    size=262144   n=1250    gap=500    rep=2
+N=4 zcring  size=262144   n=1250    gap=500    rep=3
+  pages=4k
+  learned[c0] spin=49507ns gap_ewma=455543ns wake_ewma=35596ns burn_ewma=56177ns waits=3230 blocks=3214 (99.5%) explores=15
+  learned[c1] spin=56215ns gap_ewma=455950ns wake_ewma=35098ns burn_ewma=55800ns waits=3239 blocks=3229 (99.7%) explores=15
+  learned[c2] spin=126724ns gap_ewma=451441ns wake_ewma=126724ns burn_ewma=57349ns waits=3232 blocks=3215 (99.5%) explores=15
+  learned[c3] spin=126536ns gap_ewma=451794ns wake_ewma=126536ns burn_ewma=57367ns waits=3241 blocks=3225 (99.5%) explores=15
+N=4 pipe    size=262144   n=1250    gap=500    rep=3
+N=4 unix    size=262144   n=1250    gap=500    rep=3
+N=4 zcring  size=262144   n=1250    gap=500    rep=4
+  pages=4k
+  learned[c0] spin=50930ns gap_ewma=458667ns wake_ewma=37672ns burn_ewma=54534ns waits=3224 blocks=3206 (99.4%) explores=25
+  learned[c1] spin=119750ns gap_ewma=451071ns wake_ewma=119750ns burn_ewma=59827ns waits=3239 blocks=3224 (99.5%) explores=25
+  learned[c2] spin=113712ns gap_ewma=461512ns wake_ewma=113712ns burn_ewma=53766ns waits=3225 blocks=3206 (99.4%) explores=25
+  learned[c3] spin=61624ns gap_ewma=454320ns wake_ewma=37243ns burn_ewma=57510ns waits=3239 blocks=3222 (99.5%) explores=25
+N=4 pipe    size=262144   n=1250    gap=500    rep=4
+N=4 unix    size=262144   n=1250    gap=500    rep=4
+N=4 zcring  size=262144   n=1250    gap=500    rep=5
+  pages=4k
+  learned[c0] spin=122668ns gap_ewma=455736ns wake_ewma=122668ns burn_ewma=56129ns waits=3241 blocks=3225 (99.5%) explores=26
+  learned[c1] spin=49564ns gap_ewma=452152ns wake_ewma=39217ns burn_ewma=56336ns waits=3246 blocks=3229 (99.5%) explores=26
+  learned[c2] spin=48817ns gap_ewma=451348ns wake_ewma=40151ns burn_ewma=56713ns waits=3240 blocks=3226 (99.6%) explores=26
+  learned[c3] spin=125117ns gap_ewma=453458ns wake_ewma=125117ns burn_ewma=56168ns waits=3246 blocks=3230 (99.5%) explores=26
+N=4 pipe    size=262144   n=1250    gap=500    rep=5
+N=4 unix    size=262144   n=1250    gap=500    rep=5
+thermal gate: package at 81C, waiting for <60C...
+thermal gate: at 58C after 5s, C-states redisabled, continuing
+N=4 zcring  size=1048576  n=500     gap=2000   rep=1
+  pages=4k
+  learned[c0] spin=251121ns gap_ewma=1832309ns wake_ewma=131501ns burn_ewma=228280ns waits=2499 blocks=2492 (99.7%) explores=16
+  learned[c1] spin=228810ns gap_ewma=1824855ns wake_ewma=220796ns burn_ewma=230702ns waits=2499 blocks=2489 (99.6%) explores=16
+  learned[c2] spin=245895ns gap_ewma=1825973ns wake_ewma=219104ns burn_ewma=230477ns waits=2500 blocks=2491 (99.6%) explores=16
+  learned[c3] spin=202999ns gap_ewma=1832885ns wake_ewma=131560ns burn_ewma=231858ns waits=2499 blocks=2488 (99.6%) explores=16
+N=4 pipe    size=1048576  n=500     gap=2000   rep=1
+N=4 unix    size=1048576  n=500     gap=2000   rep=1
+N=4 zcring  size=1048576  n=500     gap=2000   rep=2
+  pages=4k
+  learned[c0] spin=187465ns gap_ewma=1816984ns wake_ewma=152870ns burn_ewma=266662ns waits=2497 blocks=2484 (99.5%) explores=21
+  learned[c1] spin=276909ns gap_ewma=1784964ns wake_ewma=276909ns burn_ewma=270947ns waits=2499 blocks=2486 (99.5%) explores=21
+  learned[c2] spin=210269ns gap_ewma=1845533ns wake_ewma=210269ns burn_ewma=266513ns waits=2498 blocks=2484 (99.4%) explores=21
+  learned[c3] spin=155015ns gap_ewma=1906291ns wake_ewma=103478ns burn_ewma=251490ns waits=2499 blocks=2488 (99.6%) explores=21
+N=4 pipe    size=1048576  n=500     gap=2000   rep=2
+N=4 unix    size=1048576  n=500     gap=2000   rep=2
+N=4 zcring  size=1048576  n=500     gap=2000   rep=3
+  pages=4k
+  learned[c0] spin=213725ns gap_ewma=1851484ns wake_ewma=112281ns burn_ewma=222361ns waits=2498 blocks=2486 (99.5%) explores=18
+  learned[c1] spin=238636ns gap_ewma=1851780ns wake_ewma=191601ns burn_ewma=221868ns waits=2497 blocks=2484 (99.5%) explores=18
+  learned[c2] spin=237062ns gap_ewma=1822811ns wake_ewma=223373ns burn_ewma=231823ns waits=2498 blocks=2486 (99.5%) explores=18
+  learned[c3] spin=216430ns gap_ewma=1814525ns wake_ewma=152524ns burn_ewma=226193ns waits=2497 blocks=2490 (99.7%) explores=18
+N=4 pipe    size=1048576  n=500     gap=2000   rep=3
+N=4 unix    size=1048576  n=500     gap=2000   rep=3
+N=4 zcring  size=1048576  n=500     gap=2000   rep=4
+  pages=4k
+  learned[c0] spin=231777ns gap_ewma=1820906ns wake_ewma=231777ns burn_ewma=236288ns waits=2500 blocks=2495 (99.8%) explores=11
+  learned[c1] spin=191985ns gap_ewma=1836762ns wake_ewma=126292ns burn_ewma=231341ns waits=2499 blocks=2490 (99.6%) explores=11
+  learned[c2] spin=219557ns gap_ewma=1834832ns wake_ewma=129460ns burn_ewma=232365ns waits=2500 blocks=2493 (99.7%) explores=11
+  learned[c3] spin=234678ns gap_ewma=1823122ns wake_ewma=230306ns burn_ewma=230866ns waits=2500 blocks=2496 (99.8%) explores=11
+N=4 pipe    size=1048576  n=500     gap=2000   rep=4
+N=4 unix    size=1048576  n=500     gap=2000   rep=4
+N=4 zcring  size=1048576  n=500     gap=2000   rep=5
+  pages=4k
+  learned[c0] spin=267096ns gap_ewma=1782109ns wake_ewma=267096ns burn_ewma=261056ns waits=2498 blocks=2487 (99.6%) explores=19
+  learned[c1] spin=164598ns gap_ewma=1847324ns wake_ewma=115637ns burn_ewma=259155ns waits=2499 blocks=2490 (99.6%) explores=19
+  learned[c2] spin=155158ns gap_ewma=1811976ns wake_ewma=154324ns burn_ewma=250027ns waits=2499 blocks=2489 (99.6%) explores=19
+  learned[c3] spin=268297ns gap_ewma=1782243ns wake_ewma=268297ns burn_ewma=223157ns waits=2499 blocks=2487 (99.5%) explores=19
+N=4 pipe    size=1048576  n=500     gap=2000   rep=5
+N=4 unix    size=1048576  n=500     gap=2000   rep=5
+
+wrote results/fanout.csv
