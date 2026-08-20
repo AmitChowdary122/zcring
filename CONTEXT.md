@@ -88,7 +88,7 @@ hatch.
 
 `README.md`'s "Measured Layer 1 results" and "Fan-out results" sections are
 authoritative — read those, not this file, for anything quoted externally.
-In short: 64 B is 18–20× vs pipe (quoted as a range, reproduced across two
+In short: 64 B is 16.8× vs pipe on the shipped code (reproduced across two
 independent measurement sessions), large payloads (256 KiB–1 MiB) lose to a
 UNIX socket at N=1 under the C-state-disabled configuration the determinism
 claim requires (disclosed trade-off, see README's "Why large payloads lose
@@ -104,23 +104,21 @@ number from git history without re-verifying it.
 
 ## Machines
 
-**The measurement laptop died on 14 Aug 2026.** Its SSD was moved into the
-Ryzen machine and now dual-boots there. Every committed number came from
-hardware that no longer exists: valid as measured, **not reproducible by us on
-demand**. `scripts/lib.sh:check_machine()` refuses to write a canonical
-dataset filename on a non-i3 CPU — do not defeat it. Full statement in
-`results/PROVENANCE.md`.
+**The measurement laptop died on 14 Aug and was revived on 20 Aug** — the
+fault was the drive, the laptop is sound. It is again the canonical
+measurement machine, and `results/sweep.csv` was re-measured on it against
+current code. `scripts/lib.sh:check_machine()` refuses to write a canonical
+dataset filename on a non-i3 CPU; it *passes* on the i3, so `OUT_SUFFIX`
+discipline is manual. Full statement in `results/PROVENANCE.md`.
 
 | Machine | Role |
 |---|---|
-| **Intel i3-1115G4, 2 physical cores + SMT** | **All quoted measurements. DEAD 14 Aug.** |
-| **Ryzen 9 270, 8C/16T** — Ubuntu SSD as dual boot, plus WSL2 (Kali) on Windows | The only machine now. Development, builds, the Layer 3 VM. |
+| **Intel i3-1115G4, 2 physical cores + SMT** | **Canonical measurements.** Dead 14 Aug, revived 20 Aug. |
+| **Ryzen 9 270, 8C/16T** — Ubuntu SSD, plus WSL2 (Kali) on Windows | Secondary labelled dataset (`OUT_SUFFIX=_ryzen`); development and builds. |
 
-The claims stay anchored to the i3 regardless. A dead laptop does not change
-which platform the claims should be *about*, and 2–4 cores is what embedded
-deployment looks like. Any Ryzen run is a secondary, labelled dataset
-(`OUT_SUFFIX=_ryzen`), and its value is answering "do the conclusions survive
-a different microarchitecture?" — not "are the numbers bigger".
+Claims stay anchored to the i3: 2–4 cores is what embedded deployment looks
+like, and a Ryzen run answers "do the conclusions survive a different
+microarchitecture?" — not "are the numbers bigger".
 
 The measurement box is **dual-core with SMT** (`nproc` reports 4, but
 `lscpu` shows 2 cores/socket). Describe it as "dual-core with SMT", never as

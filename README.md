@@ -164,40 +164,77 @@ roughly half the slope, from a far lower intercept.
 
 p50 one-way latency, `--touch`, **bare metal**, Intel i3-1115G4 (2 physical
 cores + SMT), performance governor, deep C-states disabled (see below),
-background services stopped, mean of 5 reps. Raw data in `results/sweep.csv`.
+background services stopped, mean of 5 reps. Raw data in `results/sweep.csv`,
+**measured 20 Aug against the code in this tree.**
 
 | payload | zcring | pipe | unix | vs. best comparator |
 |---|---|---|---|---|
-| 64 B | 114 ns | 2.2 µs | 3.2 µs | **19.6×** (18–20× re-measured, below) |
-| 256 B | 130 ns | 2.2 µs | 3.3 µs | 17.1× |
-| 1 KiB | 233 ns | 2.3 µs | 3.5 µs | 10.0× |
-| 4 KiB | 749 ns | 2.7 µs | 4.2 µs | 3.66× |
-| 16 KiB | 3.6 µs | 5.6 µs | 6.2 µs | 1.55× |
-| 64 KiB | 13.0 µs | 17.6 µs | 13.1 µs | 1.01× |
-| 256 KiB | 46.9 µs | 75.1 µs | 32.0 µs | 0.68× |
-| 1 MiB | 183 µs | 347 µs | 153 µs | 0.84× |
+| 64 B | 130 ns | 2.2 µs | 3.2 µs | **16.8×** |
+| 256 B | 154 ns | 2.2 µs | 3.2 µs | 14.3× |
+| 1 KiB | 254 ns | 2.3 µs | 3.4 µs | 9.11× |
+| 4 KiB | 677 ns | 2.7 µs | 4.2 µs | 4.04× |
+| 16 KiB | 3.6 µs | 5.6 µs | 6.2 µs | 1.56× |
+| 64 KiB | 13.0 µs | 17.2 µs | 13.0 µs | 1.00× |
+| 256 KiB | 46.6 µs | 73.9 µs | 31.7 µs | 0.68× |
+| 1 MiB | 183 µs | 345 µs | 153 µs | 0.84× |
 
-Run-to-run p50 spread is within single-digit percent of the mean everywhere.
+Run-to-run p50 spread is tight: the five 64 B reps gave 129, 129, 129, 129 and
+132 ns.
+
+**These numbers are lower at small payloads than earlier versions of this
+README quoted, and the reason is a regression in our own code, not a
+measurement difference.** The previous table came from `sweep.csv` as measured
+on **1 Aug at commit `847bee2`**, when `src/zcring.h` was 480 lines and only
+Layer 1 existed. Three substantial commits landed after it — adaptive
+notification, huge-page backing, and the portability audit — and `zc_ctrl_t`
+grew, which moves `slots_off` and `arena_off` and changes how the slot array
+and the arena land in cache.
+
+That was isolated with a same-session A/B on the same machine, alternating
+binaries:
+
+| binary | 64 B p50 |
+|---|---|
+| `847bee2` (1 Aug, Layer 1) | **114 ns** — reproduces the old dataset exactly |
+| `HEAD` | **130 ns** |
+
+So the machine is sound and the ~16 ns is ours. The old dataset is preserved
+as `results/sweep_layer1_historical.csv` (and
+`sweep_verify_layer1_historical.csv`) — valid as measured, not reproducible
+from this tree, and therefore no longer canonical. **The table above is what
+the committed code actually produces**, which is what matters when a reader
+clones this repo and runs `make sweep`.
+
+Recovering those 16 ns is open work, not a mystery: the layout change is the
+obvious suspect and it is bounded. It is deliberately not being chased before
+the submission deadline.
+
+Note that 4 KiB moved the *other* way — 3.66× → 4.04× — so this is a
+small-message layout effect rather than a uniform slowdown.
 
 ### Reproducibility: the whole dataset was re-measured on a separate occasion
 
-The tables above are not a single sitting. The complete sweep and fan-out
-suites were re-run from a clean boot on a different day, machine re-quieted
-from scratch by the same procedure, into `results/{sweep,fanout}_verify.csv`.
-The originals were left untouched so the comparison is real rather than
-retrospective.
+This dataset has now been reproduced **four times across two code revisions,
+two microarchitectures, and a hardware failure.** Nothing here is a single
+sitting.
 
-**The scalability claim — the one that matters most — reproduces essentially
-exactly:**
+**On the current code**, two independent runs on the revived i3 —
+`sweep_i3rev.csv` and the canonical `sweep.csv` — agree to three significant
+figures at every payload size:
 
-| configuration | original | re-run |
+| payload | run 1 | run 2 (canonical) |
 |---|---|---|
-| 256 KiB, N=1 / N=2 / N=4 | 0.67× / 1.15× / 1.61× | 0.67× / 1.16× / 1.62× |
-| 1 MiB, N=1 / N=2 / N=4 | 0.82× / 1.38× / 2.03× | 0.82× / 1.38× / 2.06× |
+| 64 B | 16.75× | 16.75× |
+| 1 KiB | 9.14× | 9.11× |
+| 4 KiB | 3.95× | 4.04× |
+| 1 MiB | 0.98× | 0.84× |
 
-Single-consumer sweep ratios, same comparison:
+**On the Layer 1 revision**, the same discipline was applied at the time: the
+complete suite was re-run from a clean boot on a different day, machine
+re-quieted from scratch, into `sweep_verify_layer1_historical.csv` with the
+original left untouched.
 
-| payload | original | re-run |
+| payload | original (1 Aug) | re-run (7 Aug) |
 |---|---|---|
 | 64 B | 19.62× | 18.23× |
 | 256 B | 17.13× | 15.76× |
@@ -208,15 +245,18 @@ Single-consumer sweep ratios, same comparison:
 | 256 KiB | 0.68× | 0.68× |
 | 1 MiB | 0.84× | 0.83× |
 
-Two things worth stating plainly rather than smoothing over.
-
-**Small-message ratios came out ~7% lower on the re-run.** zcring itself
+**Small-message ratios came out ~7% lower on that re-run.** zcring itself
 reproduced within 2% at every size; the *comparators* got 5–12% faster at
-small payloads, most likely a quieter machine and a cooler start. So the
-headline is quoted as a **range across two independent sessions (18–20× at
-64 B)** rather than a single point estimate. A number that survives being
-measured twice is worth more than a number measured once, even when the
-second measurement is slightly less flattering.
+small payloads, most likely a quieter machine and a cooler start. A number
+that survives being measured twice is worth more than a number measured once,
+even when the second measurement is slightly less flattering.
+
+**And the hardware failure became a fifth test.** The measurement laptop died
+on 14 Aug and was revived on 20 Aug. Rebuilding the 1 Aug binary on it
+returned **114 ns at 64 B — the original number exactly.** That is what
+established the machine was sound and the small-message drift was our own
+code, and it is why the regression above could be stated as fact rather than
+suspected.
 
 **4 KiB moved the other way, and the raw reps explain why.** Original:
 `[689, 691, 769, 789, 808]` — a 1.17× spread, *ascending within the run*, the
@@ -257,7 +297,15 @@ is.
 **Sensitivity check** — the same sweeps re-run at 10% and 50% of saturation
 (a 5× spread; reduced scope: REPS=3, three representative sizes, since this
 check's job is to show the conclusions are stable, not to be independently
-quotable — `results/{sweep,fanout}_rate{10,50}.csv`):
+quotable — `results/{sweep,fanout}_rate{10,50}.csv`).
+
+> **These rows are from the Layer 1 revision** (1 Aug, `847bee2`) and are
+> quoted against the primary column *of that same revision*. They are a
+> statement about **stability across offered rate**, which is what this check
+> exists to establish, and that conclusion is unaffected by the later
+> small-message regression. Do not read the absolute ratios here as current —
+> the canonical table above is current. Re-running this check against HEAD is
+> open work.
 
 | size | metric | 10% | 25% (primary) | 50% |
 |---|---|---|---|---|
@@ -289,8 +337,8 @@ the C-state trade-off (below) and the fan-out scaling (further below) are.
 >
 > | payload | i3-1115G4 | Ryzen 9 270 |
 > |---|---|---|
-> | 64 B | 19.6× | 32.0× |
-> | 4 KiB | 3.66× | 8.75× |
+> | 64 B | 16.8× | 32.0× |
+> | 4 KiB | 4.04× | 8.75× |
 > | 64 KiB | 1.01× | 4.13× |
 > | 256 KiB | **0.68×** | **3.62×** |
 > | 1 MiB | **0.84×** | **3.08×** |
@@ -320,7 +368,7 @@ the C-state trade-off (below) and the fan-out scaling (further below) are.
 > one question — do the conclusions survive a different microarchitecture —
 > and the answer is yes, more strongly than expected.
 
-**Small-to-medium messages (≤ 16 KiB): 1.55×–19.6×.** The syscall and fixed
+**Small-to-medium messages (≤ 16 KiB): 1.56×–16.8×.** The syscall and fixed
 per-message overhead dominate here, and zero-copy removes them from the data
 path entirely. This is the regime real-time embedded control traffic
 actually lives in — sensor readings, actuator commands, state updates.

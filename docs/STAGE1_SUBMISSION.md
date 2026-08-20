@@ -3,7 +3,8 @@
 **Written fresh from `results/*.csv` and README.md's authoritative tables on
 17 Aug 2026. Do NOT copy from `ABSTRACT.md`** — that file predates several
 retractions and still contains `2.03× at N=4` (the true notify-mode figure is
-1.24×) and `19.6×` as a point estimate where the defensible claim is a range.
+1.24×) and `19.6×` at 64 B, which came from the Layer 1 revision — the shipped
+code gives **16.8×**.
 
 Every number below traces to committed raw data. Provenance caveats are in
 `results/PROVENANCE.md`.
@@ -70,10 +71,19 @@ with an online-learned wake policy."
 >
 > | payload | zcring p50 | best comparator | ratio |
 > |---|---|---|---|
-> | 64 B | 114 ns | 2.2 µs (pipe) | **18–20×** |
-> | 1 KiB | 233 ns | 2.3 µs (pipe) | 10.0× |
-> | 4 KiB | 749 ns | 2.7 µs (pipe) | 3.66× |
+> | 64 B | 130 ns | 2.2 µs (pipe) | **16.8×** |
+> | 1 KiB | 254 ns | 2.3 µs (pipe) | 9.11× |
+> | 4 KiB | 677 ns | 2.7 µs (pipe) | 4.04× |
 > | 1 MiB | 183 µs | 153 µs (UNIX socket) | 0.84× |
+>
+> These are the numbers **the committed code produces**, re-measured on
+> 20 August. Earlier drafts of this project quoted 19.6× at 64 B; that figure
+> came from the Layer 1 revision (commit `847bee2`, 1 Aug), and a subsequent
+> code change cost roughly 16 ns per small message. Rebuilding the old binary
+> on the same machine in the same session returned 114 ns exactly, which is
+> how the regression was distinguished from a measurement artifact. The old
+> dataset is preserved as `sweep_layer1_historical.csv`. We quote what a
+> reader who clones the repo will actually reproduce.
 >
 > **A limitation is stated here rather than left to be discovered.** The
 > small-message figures are *dedicated-core* numbers: the consumer spins. If
@@ -94,11 +104,16 @@ with an online-learned wake policy."
 >
 > | payload | Intel i3-1115G4 | AMD Ryzen 9 270 |
 > |---|---|---|
-> | 64 B | 19.6× | **32.0×** |
-> | 1 KiB | 10.0× | 19.7× |
-> | 4 KiB | 3.66× | 8.75× |
+> | 64 B | 16.8× | **32.0×** |
+> | 1 KiB | 9.11× | 19.7× |
+> | 4 KiB | 4.04× | 8.75× |
+> | 64 KiB | 1.00× | 4.13× |
 > | 256 KiB | **0.68×** | **3.62×** |
 > | 1 MiB | **0.84×** | **3.08×** |
+>
+> Both columns are the same binary, measured within hours of each other — so
+> this is a clean cross-microarchitecture comparison rather than two datasets
+> from different revisions.
 >
 > The loss **inverts**. At 1 MiB zcring's p50 falls from 183 µs to 44 µs while
 > the UNIX socket barely moves (155 µs → 136 µs), and the p50 reproduces to
@@ -281,8 +296,10 @@ with an online-learned wake policy."
 
 - **Say "dual-core with SMT", never "quad-core".** `nproc` reports 4 on the
   measurement machine; `lscpu` shows 2 cores per socket.
-- **Never quote a small-message ratio without its waiter posture.** 18–20× is
+- **Never quote a small-message ratio without its waiter posture.** 16.8× is
   spin/dedicated-core; blocking is 0.93×.
+- **Do not quote 19.6× or an "18–20×" range.** Those came from the Layer 1
+  revision; the shipped code gives 16.8×.
 - **State the large-payload loss before anyone asks.** It is disclosed in the
   Description above deliberately and should stay there.
 - **Do not claim fan-out growth past N=2.**

@@ -6,30 +6,46 @@ code, and that a fresh session will otherwise get wrong.
 
 ---
 
-## ⚠ READ FIRST — the measurement machine is gone (14 Aug)
+## ⚠ READ FIRST — machines, and which dataset is canonical (20 Aug)
 
-The **Intel i3-1115G4 laptop failed.** Its SSD was moved into the **AMD Ryzen
-9 270 (8C/16T)** and now runs there as a dual boot. That Ryzen is the only
-machine: Windows + WSL2 (Kali) on one side, the Ubuntu SSD on the other.
+**The i3 died on 14 Aug and was REVIVED on 20 Aug.** The fault was the drive;
+the laptop itself is sound. It is again the measurement machine.
 
-**Every CSV in `results/` was measured on the i3.** They are valid as
-measured and are NOT being re-taken. Full statement in
-`results/PROVENANCE.md` — read it before touching any dataset.
+| Machine | Role |
+|---|---|
+| **Intel i3-1115G4**, 2 physical cores + SMT | **Canonical measurements.** Dead 14 Aug, revived 20 Aug. |
+| **AMD Ryzen 9 270**, 8C/16T | Secondary, labelled. Development, and the second-microarchitecture dataset. |
 
-`scripts/lib.sh:check_machine()` now **refuses** to write a canonical dataset
-filename (`results/sweep.csv`, `results/fanout.csv`, `results/hugepage_ab.csv`)
-on a CPU that is not the i3. Set `OUT_SUFFIX=_ryzen` to measure the new
-machine into its own file. **Do not defeat this guard** — mixing two CPUs into
-one CSV is invisible after the fact, and we have already destroyed one
-committed dataset by overwriting it.
+**`results/sweep.csv` was re-measured on 20 Aug against the code in this
+tree.** That matters: the previous canonical sweep came from **1 Aug, commit
+`847bee2`**, when only Layer 1 existed. Three commits landed after it —
+adaptive notification, huge pages, the portability audit — and they cost
+**~16 ns per small message**. Isolated with a same-session A/B alternating
+binaries on the same machine:
 
-The headline claims stay anchored to the i3. A dead laptop does not change
-which platform the claims should be *about*, and 2–4 cores is what embedded
-deployment looks like. Any Ryzen dataset is secondary and labelled, and the
-question it answers is **"do the conclusions survive a different
-microarchitecture?"** (Zen vs Tiger Lake, 8 cores vs 2) — not "are the numbers
-bigger". That is a *better* experiment than the N=8 scaling run cancelled on
-9 Aug, but it comes after the Stage 1 form text and demo video, not before.
+| binary | 64 B p50 |
+|---|---|
+| `847bee2` | **114 ns** — reproduces the old dataset exactly |
+| `HEAD` | **130 ns** |
+
+So the machine is sound and the regression is ours. The old datasets are
+preserved as `sweep_layer1_historical.csv` and
+`sweep_verify_layer1_historical.csv` — valid as measured, not reproducible
+from this tree, **no longer canonical**.
+
+**Headline is now 16.8× at 64 B, not 19.6× and not an "18–20×" range.** Quote
+what the committed code produces. Recovering those 16 ns is open work and the
+layout change is the obvious suspect; deliberately not chased before the
+deadline.
+
+**`results/fanout_notify.csv` is still 8 Aug** — after adaptive notification
+but before huge pages and the portability audit. The N=2 crossover rests on
+it. Re-running fan-out against HEAD is the highest-value measurement
+outstanding.
+
+`scripts/lib.sh:check_machine()` refuses to write a canonical dataset filename
+on a non-i3 CPU. It passes on the revived i3, so **`OUT_SUFFIX` discipline is
+on you** — we have already destroyed one committed dataset by overwriting it.
 
 ---
 
@@ -39,8 +55,8 @@ bigger". That is a *better* experiment than the N=8 scaling run cancelled on
 
 | payload | i3-1115G4 | Ryzen 9 270 |
 |---|---|---|
-| 64 B | 19.6× | 32.0× |
-| 4 KiB | 3.66× | 8.75× |
+| 64 B | 16.8× | 32.0× |
+| 4 KiB | 4.04× | 8.75× |
 | 256 KiB | **0.68×** | **3.62×** |
 | 1 MiB | **0.84×** | **3.08×** |
 
@@ -794,7 +810,7 @@ context.
 **Stale as of the same-day follow-up session — numbers below are current;
 do not use anything from before today.**
 
-Syscall-free small-message latency (19.6× at 64 B, 10.0× at 1 KiB) for
+Syscall-free small-message latency (16.8× at 64 B, 9.1× at 1 KiB) for
 embedded real-time control traffic. State the large-payload trade-off
 yourself before a judge finds it: at N=1, zcring *loses* to a UNIX socket
 at 256 KiB–1 MiB (0.68×–0.84×), a real, disclosed cost of the C-state

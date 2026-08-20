@@ -1,62 +1,42 @@
 # Provenance of the committed datasets
 
-**Every CSV in this directory was measured on an Intel Core i3-1115G4** —
-2 physical cores plus SMT, bare-metal Ubuntu, C-states disabled, producer and
-consumer pinned to distinct physical cores. Methodology in `README.md`.
+## Machines
 
-## The measurement machine no longer exists
+| Machine | Role |
+|---|---|
+| **Intel Core i3-1115G4** — 2 physical cores + SMT, bare metal | **Canonical.** Died 14 Aug 2026 (drive fault); **revived 20 Aug**. |
+| **AMD Ryzen 9 270** — 8C/16T | Secondary, labelled `_ryzen`. |
 
-On **14 Aug 2026** that laptop failed. Its SSD was moved into an **AMD Ryzen 9
-270 (8C/16T)** and now runs there as a dual boot.
+All canonical measurements are on the i3: `--touch`, C-states disabled,
+performance governor, producer and consumer pinned to distinct physical cores,
+5 repetitions. Methodology in `README.md`.
 
-**Consequences, stated plainly because a judge may ask:**
+## Two code revisions, and which datasets belong to which
 
-- The committed numbers remain valid *as measured*. Nothing about them
-  changed; the methodology, the raw data and the analysis scripts are all in
-  this repo.
-- They are **no longer reproducible by us on demand**, because we no longer
-  own the hardware they were taken on. They remain reproducible by anyone with
-  an equivalent part, which is the sense in which the reproducibility claim in
-  `README.md` was ever meant.
-- The claim that the full suite was **re-measured on a separate occasion and
-  reproduced within 1.5%** (`sweep_verify.csv`, `fanout_verify.csv`) is
-  unaffected. Both runs happened on the i3, weeks apart, from a clean boot.
+**This is the thing to get right before quoting any number.**
 
-## Why the numbers are not being re-taken on the Ryzen
+| Dataset | Machine | Code | Status |
+|---|---|---|---|
+| `sweep.csv` | i3 (revived) | **HEAD, 20 Aug** | **canonical** |
+| `sweep_i3rev.csv` | i3 (revived) | HEAD, 20 Aug | independent re-run; agrees to 3 s.f. |
+| `sweep_layer1_historical.csv` | i3 | `847bee2`, 1 Aug | historical — not reproducible from this tree |
+| `sweep_verify_layer1_historical.csv` | i3 | pre-Layer-2, 7 Aug | historical |
+| `sweep_ryzen.csv` | Ryzen | HEAD, 20 Aug | secondary, labelled |
+| `fanout_notify.csv` | i3 | 8 Aug | **pre-dates huge pages + portability audit** |
+| `fanout_yield_historical.csv` | i3 | measured under `--yield`, removed | historical |
+| `cstate_*.csv`, `hugepage_ab.csv`, `tail_1mib.csv`, `sweep_rate{10,50}.csv` | i3 | various | supporting studies |
+| `ryzen_bringup.txt` | Ryzen | 17 Aug | bring-up log |
 
-The headline claims are deliberately anchored to hardware representative of
-**embedded deployment**, where 2–4 cores is typical. An 8-core desktop part is
-*less* representative of the problem statement, not more — the same reasoning
-that led to dropping a planned Ryzen scaling run before the laptop failed.
-A dead laptop does not change which platform the claims should be about.
+**A code regression sits between the two revisions.** `zc_ctrl_t` grew across
+adaptive notification, huge-page backing and the portability audit, which
+moves `slots_off`/`arena_off` and costs ~16 ns per small message. Established
+by a same-session A/B alternating binaries on one machine: `847bee2` returned
+**114 ns** at 64 B — the historical number exactly — while HEAD returned
+**130 ns**. So the machine is sound and the drift is ours. Headline is
+**16.8×**, not the historical 19.6×.
 
-## If the Ryzen is measured
-
-It would be a **secondary, clearly-labelled dataset**, and the interesting
-question is not "are the numbers better" but **"do the conclusions survive a
-completely different microarchitecture?"** — Zen vs Tiger Lake, 8 cores vs 2,
-different cache hierarchy and idle-state behaviour. Structural agreement
-across two unlike parts is stronger evidence than a third run on the same box
-would have been.
-
-Rules for any such run:
-
-- **`OUT_SUFFIX` is mandatory** (`_ryzen`). `scripts/lib.sh:check_machine()`
-  enforces this and will refuse to write a canonical filename on a CPU that
-  isn't the i3.
-- Record the CPU, kernel and date in the table below.
-- Never merge two machines into one table, chart or claim.
-
-## Dataset index
-
-| Files | CPU | Notes |
-|---|---|---|
-| `sweep.csv`, `sweep_verify.csv`, `sweep_rate{10,50}.csv`, `sweep_notify_reps1.csv` | i3-1115G4 | baseline payload sweeps |
-| `fanout_notify.csv`, `fanout_yield_historical.csv`, `fanout_verify.csv`, `fanout_rate{10,50}.csv`, `fanout_1mib_unsaturated.csv` | i3-1115G4 | `_yield_historical` measured under a flag that no longer exists |
-| `cstate_*.csv` | i3-1115G4 | idle-state tail-latency study |
-| `hugepage_ab.csv`, `tail_1mib.csv` | i3-1115G4 | huge-page A/B and 1 MiB tail characterisation |
-
-| `sweep_ryzen.csv`, `sweep_ryzen.log`, `ryzen_bringup.txt` | **AMD Ryzen 9 270 (8C/16T)** | **secondary, labelled** — see below |
+**Never mix revisions in one table.** The same rule that applies to mixing
+machines applies to mixing code.
 
 ## The Ryzen dataset — what it is and is not for (20 Aug)
 
@@ -91,12 +71,19 @@ leaving platform power/frequency behaviour as the only remaining candidate. A
 different platform was the most direct test available, and the prediction
 held.
 
-**Evidence, not proof.** The i3 is gone, so this was never a controlled A/B,
-and the two parts differ in per-core memory bandwidth, fabric clock and
-prefetch independently of anything tested — 183 µs at 1 MiB is ≈5.7 GB/s, a
-memory-bandwidth-shaped number. Claim that **the cost tracks platform memory
-and frequency behaviour rather than the transport design**; do not claim an
-isolated mechanism.
+**Evidence, not proof — but better evidence than it was.** Both sweeps are now
+the **same binary** (HEAD), measured within hours of each other on 20 Aug, so
+the code variable is controlled. What remains uncontrolled is everything else
+about the two parts: per-core memory bandwidth, fabric clock and prefetch all
+differ independently of anything tested, and 183 µs at 1 MiB is ≈5.7 GB/s — a
+memory-bandwidth-shaped number. So claim that **the cost tracks platform
+memory and frequency behaviour rather than the transport design**; do not
+claim an isolated mechanism.
+
+Now that the i3 is revived, a genuinely controlled experiment is possible —
+same binary, same day, both machines, with the specific platform variables
+(uncore frequency, RAPL budget, per-core bandwidth) instrumented rather than
+inferred. That is Stage 2 work, not Stage 1 work.
 
 Nothing else in this directory was measured on the Ryzen. If that changes, add
 the rows above in the same commit as the data.

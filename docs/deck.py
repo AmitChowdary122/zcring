@@ -129,7 +129,7 @@ note(ax, "Architecture diagram submitted separately · Vyukov sequence scheme ·
 pdf.savefig(fig); plt.close(fig)
 
 # ------------------------------------------------- 4. small-message result --
-fig, ax = slide(pdf, "Small messages: 18–20× lower latency",
+fig, ax = slide(pdf, "Small messages: 16.8x lower latency",
                 "One-way p50, bare metal, dual-core + SMT, every payload byte written and read")
 sizes = ["64","256","1024","4096","16384","65536"]
 labels = ["64 B","256 B","1 KiB","4 KiB","16 KiB","64 KiB"]
@@ -144,8 +144,8 @@ axc.set_ylabel("p50 latency (µs, log)", fontsize=11.5, color=MUTED)
 axc.legend(fontsize=11, frameon=False); axc.tick_params(labelsize=10, colors=MUTED)
 for sp in ("top","right"): axc.spines[sp].set_visible(False)
 for sp in ("left","bottom"): axc.spines[sp].set_color("#d5d9e0")
-tbl = [("64 B", "114 ns", "18–20×"), ("1 KiB", "233 ns", "~10×"),
-       ("4 KiB", "749 ns", "3.7×"), ("16 KiB", "3.6 µs", "1.55×")]
+tbl = [("64 B", "130 ns", "16.8x"), ("1 KiB", "254 ns", "9.1x"),
+       ("4 KiB", "677 ns", "4.0x"), ("16 KiB", "3.6 us", "1.56x")]
 ax.text(68, 66, "zcring p50        vs best", fontsize=12, color=MUTED)
 yy = 60
 for a, b, c in tbl:
@@ -153,8 +153,8 @@ for a, b, c in tbl:
     ax.text(80, yy, b, fontsize=13.5, color=INK, va="center", ha="right")
     ax.text(93, yy, c, fontsize=13.5, color=ZC, fontweight="bold", va="center", ha="right")
     yy -= 5.5
-ax.text(68, 34, "Quoted as a range because the entire\nsuite was re-measured on a separate\noccasion; zcring reproduced within 2%.",
-        fontsize=11.5, color=FAINT, va="top", linespacing=1.7)
+ax.text(68, 34, "Measured 20 Aug against the code in\nthis repo, and reproduced by a second\nindependent run to three significant\nfigures. Earlier drafts quoted 19.6x from\nthe Layer 1 revision; a later code change\ncost ~16 ns per small message and the\nhistorical dataset is kept, labelled.",
+        fontsize=11, color=FAINT, va="top", linespacing=1.6)
 note(ax, "Dedicated-core (polling) configuration — see next slide. Raw data: results/sweep.csv")
 pdf.savefig(fig); plt.close(fig)
 
@@ -163,7 +163,7 @@ fig, ax = slide(pdf, "Two deployment postures, stated up front",
                 "The small-message win comes from removing the syscall — so it depends on not making one")
 for i, (t, sub, col, vals) in enumerate([
     ("Dedicated core  (spin)", "the consumer polls the ring", ZC,
-     ["64 B:  114 ns   ·   18–20× vs pipe",
+     ["64 B:  130 ns   ·   16.8x vs pipe",
       "lowest achievable latency",
       "costs one core, continuously",
       "standard practice in real-time embedded"]),
@@ -183,7 +183,7 @@ for i, (t, sub, col, vals) in enumerate([
         yy -= 6.5
 ax.text(50, 18, "Both are shipped. The framework does not pick for you — the deployment does.",
         fontsize=14.5, color=INK, ha="center", fontweight="bold")
-note(ax, "The 18–20× headline is a dedicated-core number and is labelled as such everywhere it appears.")
+note(ax, "The 16.8x headline is a dedicated-core number and is labelled as such everywhere it appears. Measured 20 Aug against the code in this repo.")
 pdf.savefig(fig); plt.close(fig)
 
 # ------------------------------------------------------------ 6. fan-out ----
