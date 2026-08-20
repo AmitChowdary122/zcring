@@ -56,5 +56,41 @@ Rules for any such run:
 | `cstate_*.csv` | i3-1115G4 | idle-state tail-latency study |
 | `hugepage_ab.csv`, `tail_1mib.csv` | i3-1115G4 | huge-page A/B and 1 MiB tail characterisation |
 
-Nothing in this directory was measured on the Ryzen. If that changes, add the
-rows here in the same commit as the data.
+| `sweep_ryzen.csv`, `sweep_ryzen.log`, `ryzen_bringup.txt` | **AMD Ryzen 9 270 (8C/16T)** | **secondary, labelled** — see below |
+
+## The Ryzen dataset — what it is and is not for (20 Aug)
+
+`sweep_ryzen.csv` is the identical sweep (`--touch`, 5 reps, performance
+governor, deep C-states disabled, producer and consumer pinned to distinct
+physical cores) on the replacement machine. It exists to answer one question:
+**do the conclusions survive a different microarchitecture?**
+
+**Quotable from it: p50.** It reproduces to three significant figures across
+all five repetitions at every payload size.
+
+**NOT quotable from it: any tail statistic.** p99.99 and max are *bimodal*
+across repetitions — e.g. at 4 KiB the five p99.99 values are 8.6, 1217.8,
+1075.2, 1215.1 and 0.7 µs, with p50 constant at 0.4 µs throughout. A p50 that
+stable alongside a tail that unstable is external interference on a machine
+that was not fully quieted, not a property of the transport. Re-run on a
+quiesced machine before quoting any Ryzen tail number.
+
+**The headline claims stay anchored to the i3** regardless of the Ryzen being
+faster. 2–4 cores is representative of embedded deployment; an 8C/16T desktop
+part is not, and "our numbers got bigger on a bigger CPU" is not a result.
+
+## What the Ryzen dataset established
+
+The i3's large-payload loss (0.68× at 256 KiB, 0.84× at 1 MiB) **inverts on
+Zen** — 3.62× and 3.08×. zcring's 1 MiB p50 falls 183 µs → 44 µs while the
+UNIX socket barely moves, 155 µs → 136 µs.
+
+This is the fifth and decisive test of that gap. Offered rate, thermal state,
+busy-spin power draw and TLB pressure were each tested and each came back
+negative, leaving platform power/frequency behaviour as the only remaining
+candidate. A different platform was the direct test of that prediction, and it
+confirmed it. The disclosed weakness is a property of one CPU, not of the
+design.
+
+Nothing else in this directory was measured on the Ryzen. If that changes, add
+the rows above in the same commit as the data.

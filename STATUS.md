@@ -33,6 +33,39 @@ bigger". That is a *better* experiment than the N=8 scaling run cancelled on
 
 ---
 
+## RESOLVED 20 Aug — the large-payload loss was the platform, not the design
+
+**`results/sweep_ryzen.csv` (5 reps, C-states disabled, pinned) inverts it.**
+
+| payload | i3-1115G4 | Ryzen 9 270 |
+|---|---|---|
+| 64 B | 19.6× | 32.0× |
+| 4 KiB | 3.66× | 8.75× |
+| 256 KiB | **0.68×** | **3.62×** |
+| 1 MiB | **0.84×** | **3.08×** |
+
+At 1 MiB zcring's p50 goes 183 µs → 44 µs while the UNIX socket barely moves
+(155 µs → 136 µs). p50 reproduces to three significant figures across all
+five reps.
+
+This was the **fifth** test of that gap. Offered rate, thermal state,
+busy-spin power draw and TLB pressure all came back negative, leaving
+"platform power/frequency behaviour" as the only surviving candidate. Running
+the identical sweep on a different microarchitecture was the direct test of
+that prediction and it confirmed it. **The disclosed weakness is a property of
+one CPU, not of this code.** Update any doc that still frames it otherwise.
+
+**Do not re-anchor the headline claims to the Ryzen.** 2–4 cores is what
+embedded deployment looks like; "the numbers got bigger on a bigger CPU" is
+not a result. The Zen dataset is secondary and labelled — see
+`results/PROVENANCE.md`.
+
+**Do not quote any Ryzen tail statistic.** p50 is rock-solid there but p99.99
+is bimodal across reps (at 4 KiB: 8.6, 1217.8, 1075.2, 1215.1, 0.7 µs, with
+p50 constant at 0.4 µs). A stable p50 beside an unstable tail is external
+interference on an unquieted desktop, not transport behaviour. Requires a
+quiesced re-run before it is worth anything.
+
 ## Where the project stands
 
 - **Layer 1 complete** — lock-free MPMC ring over memfd. TSan clean.

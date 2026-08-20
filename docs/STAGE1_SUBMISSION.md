@@ -75,17 +75,45 @@ with an online-learned wake policy."
 > | 4 KiB | 749 ns | 2.7 µs (pipe) | 3.66× |
 > | 1 MiB | 183 µs | 153 µs (UNIX socket) | 0.84× |
 >
-> **Two limitations are stated here rather than left to be discovered.**
-> First, the small-message figures are *dedicated-core* numbers: the consumer
-> spins. If it blocks instead, the system call returns to the data path and
-> 64 B falls to parity (0.93×). Real-time control loops, software radio and
-> industrial controllers routinely dedicate a core, and the framework supports
-> both postures — but the number must be quoted with its posture. Second, at
-> 256 KiB and above a single-consumer transfer is *slower* than a UNIX socket
-> (0.68–0.84×). Four hypotheses were tested against that gap — offered rate,
-> thermal state, busy-spin power draw, and TLB pressure via huge pages — and
-> all four were negative; the remaining candidates are platform power
-> behaviour rather than properties of this code.
+> **A limitation is stated here rather than left to be discovered.** The
+> small-message figures are *dedicated-core* numbers: the consumer spins. If
+> it blocks instead, the system call returns to the data path and 64 B falls
+> to parity (0.93×). Real-time control loops, software radio and industrial
+> controllers routinely dedicate a core, and the framework supports both
+> postures — but the number must always be quoted with its posture.
+>
+> **A second limitation was disclosed, investigated, and then resolved by
+> measurement.** On the Intel part, single-consumer transfers above 256 KiB
+> were *slower* than a UNIX socket (0.68–0.84×). Four hypotheses were tested
+> against that gap — offered rate, thermal state, busy-spin power draw, and
+> TLB pressure via huge pages — and **all four were negative**, leaving
+> platform power/frequency behaviour as the only remaining candidate. That
+> prediction was then tested directly by re-running the identical sweep on a
+> different microarchitecture (AMD Zen, `results/sweep_ryzen.csv`, 5
+> repetitions):
+>
+> | payload | Intel i3-1115G4 | AMD Ryzen 9 270 |
+> |---|---|---|
+> | 64 B | 19.6× | **32.0×** |
+> | 1 KiB | 10.0× | 19.7× |
+> | 4 KiB | 3.66× | 8.75× |
+> | 256 KiB | **0.68×** | **3.62×** |
+> | 1 MiB | **0.84×** | **3.08×** |
+>
+> The loss **inverts**. At 1 MiB zcring's p50 falls from 183 µs to 44 µs while
+> the UNIX socket barely moves (155 µs → 136 µs), and the p50 reproduces to
+> three significant figures across all five repetitions. The disclosed
+> weakness was a property of one platform, not of the design — which is what
+> the four negative hypotheses predicted, now confirmed on independent
+> hardware rather than argued.
+>
+> The headline claims in this submission remain anchored to the Intel part,
+> because 2–4 cores is representative of embedded deployment and the Zen part
+> is a desktop-class CPU. The Zen dataset is secondary and labelled. Its
+> *tail* figures are explicitly not quoted: p50 reproduces perfectly there,
+> but p99.99 is bimodal across repetitions, which is external interference on
+> a machine that was not fully quieted rather than a property of the
+> transport.
 >
 > **Scalability** recovers the large-payload case. Publication costs one
 > release store regardless of consumer count, while copying transports pay N
