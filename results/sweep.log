@@ -1,0 +1,524 @@
+zcring waiter: spin
+pinning: producer cpu=0 (physical core 0), consumer cpu=1 (physical core 1)
+rate fraction: 25% of saturation
+running zcring  size=64       n=20000   gap=100    rep=1
+  pages=4k
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=64       n=20000   gap=100    rep=1
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=64       n=20000   gap=100    rep=1
+thermal gate: package at 62C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=64       n=20000   gap=100    rep=2
+  pages=4k
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=64       n=20000   gap=100    rep=2
+thermal gate: package at 62C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=64       n=20000   gap=100    rep=2
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=64       n=20000   gap=100    rep=3
+  pages=4k
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=64       n=20000   gap=100    rep=3
+thermal gate: package at 62C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running unix    size=64       n=20000   gap=100    rep=3
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running zcring  size=64       n=20000   gap=100    rep=4
+  pages=4k
+thermal gate: package at 67C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=64       n=20000   gap=100    rep=4
+thermal gate: package at 62C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=64       n=20000   gap=100    rep=4
+thermal gate: package at 61C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=64       n=20000   gap=100    rep=5
+  pages=4k
+thermal gate: package at 68C, waiting for <60C...
+thermal gate: at 46C after 5s, C-states redisabled, continuing
+running pipe    size=64       n=20000   gap=100    rep=5
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running unix    size=64       n=20000   gap=100    rep=5
+thermal gate: package at 61C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=256      n=20000   gap=100    rep=1
+  pages=4k
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=256      n=20000   gap=100    rep=1
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 46C after 5s, C-states redisabled, continuing
+running unix    size=256      n=20000   gap=100    rep=1
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 46C after 5s, C-states redisabled, continuing
+running zcring  size=256      n=20000   gap=100    rep=2
+  pages=4k
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running pipe    size=256      n=20000   gap=100    rep=2
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=256      n=20000   gap=100    rep=2
+thermal gate: package at 62C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=256      n=20000   gap=100    rep=3
+  pages=4k
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=256      n=20000   gap=100    rep=3
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=256      n=20000   gap=100    rep=3
+thermal gate: package at 62C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=256      n=20000   gap=100    rep=4
+  pages=4k
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 46C after 5s, C-states redisabled, continuing
+running pipe    size=256      n=20000   gap=100    rep=4
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running unix    size=256      n=20000   gap=100    rep=4
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=256      n=20000   gap=100    rep=5
+  pages=4k
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running pipe    size=256      n=20000   gap=100    rep=5
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=256      n=20000   gap=100    rep=5
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=1024     n=20000   gap=100    rep=1
+  pages=4k
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=1024     n=20000   gap=100    rep=1
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=1024     n=20000   gap=100    rep=1
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=1024     n=20000   gap=100    rep=2
+  pages=4k
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=1024     n=20000   gap=100    rep=2
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=1024     n=20000   gap=100    rep=2
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=1024     n=20000   gap=100    rep=3
+  pages=4k
+thermal gate: package at 68C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=1024     n=20000   gap=100    rep=3
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=1024     n=20000   gap=100    rep=3
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=1024     n=20000   gap=100    rep=4
+  pages=4k
+thermal gate: package at 67C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=1024     n=20000   gap=100    rep=4
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running unix    size=1024     n=20000   gap=100    rep=4
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running zcring  size=1024     n=20000   gap=100    rep=5
+  pages=4k
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 46C after 5s, C-states redisabled, continuing
+running pipe    size=1024     n=20000   gap=100    rep=5
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=1024     n=20000   gap=100    rep=5
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=4096     n=20000   gap=100    rep=1
+  pages=4k
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running pipe    size=4096     n=20000   gap=100    rep=1
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running unix    size=4096     n=20000   gap=100    rep=1
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=4096     n=20000   gap=100    rep=2
+  pages=4k
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=4096     n=20000   gap=100    rep=2
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=4096     n=20000   gap=100    rep=2
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=4096     n=20000   gap=100    rep=3
+  pages=4k
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=4096     n=20000   gap=100    rep=3
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=4096     n=20000   gap=100    rep=3
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=4096     n=20000   gap=100    rep=4
+  pages=4k
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=4096     n=20000   gap=100    rep=4
+thermal gate: package at 62C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=4096     n=20000   gap=100    rep=4
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=4096     n=20000   gap=100    rep=5
+  pages=4k
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running pipe    size=4096     n=20000   gap=100    rep=5
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=4096     n=20000   gap=100    rep=5
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=16384    n=20000   gap=100    rep=1
+  pages=4k
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=16384    n=20000   gap=100    rep=1
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 51C after 5s, C-states redisabled, continuing
+running unix    size=16384    n=20000   gap=100    rep=1
+thermal gate: package at 62C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=16384    n=20000   gap=100    rep=2
+  pages=4k
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=16384    n=20000   gap=100    rep=2
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running unix    size=16384    n=20000   gap=100    rep=2
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=16384    n=20000   gap=100    rep=3
+  pages=4k
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=16384    n=20000   gap=100    rep=3
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=16384    n=20000   gap=100    rep=3
+thermal gate: package at 62C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=16384    n=20000   gap=100    rep=4
+  pages=4k
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=16384    n=20000   gap=100    rep=4
+thermal gate: package at 62C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=16384    n=20000   gap=100    rep=4
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running zcring  size=16384    n=20000   gap=100    rep=5
+  pages=4k
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=16384    n=20000   gap=100    rep=5
+thermal gate: package at 62C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running unix    size=16384    n=20000   gap=100    rep=5
+thermal gate: package at 62C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=65536    n=20000   gap=124    rep=1
+  pages=4k
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=65536    n=20000   gap=124    rep=1
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running unix    size=65536    n=20000   gap=124    rep=1
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running zcring  size=65536    n=20000   gap=124    rep=2
+  pages=4k
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running pipe    size=65536    n=20000   gap=124    rep=2
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running unix    size=65536    n=20000   gap=124    rep=2
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running zcring  size=65536    n=20000   gap=124    rep=3
+  pages=4k
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=65536    n=20000   gap=124    rep=3
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 50C after 5s, C-states redisabled, continuing
+running unix    size=65536    n=20000   gap=124    rep=3
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=65536    n=20000   gap=124    rep=4
+  pages=4k
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running pipe    size=65536    n=20000   gap=124    rep=4
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=65536    n=20000   gap=124    rep=4
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running zcring  size=65536    n=20000   gap=124    rep=5
+  pages=4k
+thermal gate: package at 66C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running pipe    size=65536    n=20000   gap=124    rep=5
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running unix    size=65536    n=20000   gap=124    rep=5
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running zcring  size=262144   n=2000    gap=500    rep=1
+  pages=4k
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=262144   n=2000    gap=500    rep=1
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=262144   n=2000    gap=500    rep=1
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running zcring  size=262144   n=2000    gap=500    rep=2
+  pages=4k
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running pipe    size=262144   n=2000    gap=500    rep=2
+thermal gate: package at 62C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=262144   n=2000    gap=500    rep=2
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=262144   n=2000    gap=500    rep=3
+  pages=4k
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=262144   n=2000    gap=500    rep=3
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running unix    size=262144   n=2000    gap=500    rep=3
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running zcring  size=262144   n=2000    gap=500    rep=4
+  pages=4k
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=262144   n=2000    gap=500    rep=4
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=262144   n=2000    gap=500    rep=4
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=262144   n=2000    gap=500    rep=5
+  pages=4k
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=262144   n=2000    gap=500    rep=5
+thermal gate: package at 63C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running unix    size=262144   n=2000    gap=500    rep=5
+thermal gate: package at 64C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running zcring  size=1048576  n=500     gap=2000   rep=1
+  pages=4k
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 47C after 5s, C-states redisabled, continuing
+running pipe    size=1048576  n=500     gap=2000   rep=1
+thermal gate: package at 65C, waiting for <60C...
+thermal gate: at 48C after 5s, C-states redisabled, continuing
+running unix    size=1048576  n=500     gap=2000   rep=1
+thermal gate: package at 66C, waiting for <60C...
+thermal gate: at 49C after 5s, C-states redisabled, continuing
+running zcring  size=1048576  n=500     gap=2000   rep=2
+  pages=4k
+thermal gate: package at 68C, waiting for <60C...
+thermal gate: at 50C after 5s, C-states redisabled, continuing
+running pipe    size=1048576  n=500     gap=2000   rep=2
+thermal gate: package at 67C, waiting for <60C...
+thermal gate: at 49C after 5s, C-states redisabled, continuing
+running unix    size=1048576  n=500     gap=2000   rep=2
+thermal gate: package at 66C, waiting for <60C...
+thermal gate: at 50C after 5s, C-states redisabled, continuing
+running zcring  size=1048576  n=500     gap=2000   rep=3
+  pages=4k
+thermal gate: package at 68C, waiting for <60C...
+thermal gate: at 51C after 5s, C-states redisabled, continuing
+running pipe    size=1048576  n=500     gap=2000   rep=3
+thermal gate: package at 67C, waiting for <60C...
+thermal gate: at 50C after 5s, C-states redisabled, continuing
+running unix    size=1048576  n=500     gap=2000   rep=3
+thermal gate: package at 66C, waiting for <60C...
+thermal gate: at 51C after 5s, C-states redisabled, continuing
+running zcring  size=1048576  n=500     gap=2000   rep=4
+  pages=4k
+thermal gate: package at 69C, waiting for <60C...
+thermal gate: at 51C after 5s, C-states redisabled, continuing
+running pipe    size=1048576  n=500     gap=2000   rep=4
+thermal gate: package at 67C, waiting for <60C...
+thermal gate: at 51C after 5s, C-states redisabled, continuing
+running unix    size=1048576  n=500     gap=2000   rep=4
+thermal gate: package at 67C, waiting for <60C...
+thermal gate: at 50C after 5s, C-states redisabled, continuing
+running zcring  size=1048576  n=500     gap=2000   rep=5
+  pages=4k
+thermal gate: package at 69C, waiting for <60C...
+thermal gate: at 51C after 5s, C-states redisabled, continuing
+running pipe    size=1048576  n=500     gap=2000   rep=5
+thermal gate: package at 67C, waiting for <60C...
+thermal gate: at 52C after 5s, C-states redisabled, continuing
+running unix    size=1048576  n=500     gap=2000   rep=5
+
+wrote results/sweep.csv
+transport  size     mean_ns  p50_ns  p99_ns  p999_ns  p9999_ns  max_ns
+zcring     64       284      129     150     222      484581    533936
+pipe       64       3376     2172    2531    508279   1048355   1214504
+unix       64       4281     3176    3702    466627   1170061   1367964
+zcring     64       288      129     223     1268     500754    513135
+pipe       64       3119     2176    2684    430620   1053974   1252925
+unix       64       3412     3169    3646    52826    486834    498100
+zcring     64       241      129     148     214      451607    515217
+pipe       64       2332     2173    2485    4844     487223    537117
+unix       64       3511     3152    4008    77839    527232    561256
+zcring     64       271      129     145     189      489820    527586
+pipe       64       3504     2176    2521    539740   1065918   1264902
+unix       64       3292     3168    3595    6338     466906    515244
+zcring     64       317      132     149     271      463222    497641
+pipe       64       2633     2160    2548    63982    836218    1035084
+unix       64       4036     3174    3735    395228   1031099   1228619
+zcring     256      351      154     181     356      485057    532793
+pipe       256      2569     2209    2580    102548   500787    563020
+unix       256      3775     3216    4150    88393    882165    1079084
+zcring     256      424      153     179     435      489518    518991
+pipe       256      3780     2173    2921    550342   1148829   1247768
+unix       256      3983     3249    3742    247294   1058443   1255574
+zcring     256      333      155     176     274      451630    541774
+pipe       256      2800     2202    2881    105900   1041165   1240031
+unix       256      3526     3234    3835    32643    534559    555201
+zcring     256      251      154     183     292      451476    500093
+pipe       256      2776     2192    2502    98057    995870    1194506
+unix       256      3417     3218    3675    7249     511807    552441
+zcring     256      352      154     180     253      525349    531609
+pipe       256      3481     2208    2516    531407   1129914   1228937
+unix       256      3444     3239    3691    15753    469333    547280
+zcring     1024     391      254     306     486      470800    544752
+pipe       1024     2757     2329    2647    42477    551336    726745
+unix       1024     3548     3406    3891    7256     481674    539054
+zcring     1024     387      255     308     480      457702    541353
+pipe       1024     3127     2324    2794    316621   967111    1066337
+unix       1024     4662     3421    3935    541957   1095999   1231371
+zcring     1024     393      254     303     510      486546    517282
+pipe       1024     2951     2305    2906    219899   876356    1075057
+unix       1024     4991     3420    3932    650356   1145698   1243424
+zcring     1024     558      255     325     25165    508386    524267
+pipe       1024     3621     2310    2625    524478   1158152   1257061
+unix       1024     3884     3392    3854    49761    875318    1072559
+zcring     1024     394      254     331     1588     448211    541539
+pipe       1024     2847     2323    2681    79684    875460    1074151
+unix       1024     3648     3420    3915    7403     493739    559944
+zcring     4096     835      678     1046    1266     465717    538801
+pipe       4096     3943     2735    3140    514552   1032297   1229584
+unix       4096     5111     4169    5434    351289   787631    837104
+zcring     4096     919      678     1082    1289     481522    547376
+pipe       4096     3027     2715    3076    60122    482374    542992
+unix       4096     6426     4179    5168    753980   1189048   1286405
+zcring     4096     862      687     1057    1241     450303    520872
+pipe       4096     3772     2752    3166    457526   1066837   1264053
+unix       4096     5098     4203    5701    297489   790766    939692
+zcring     4096     934      670     1058    1246     492760    504866
+pipe       4096     3272     2734    3164    96659    870227    1067740
+unix       4096     5676     4188    4967    577420   1187672   1285413
+zcring     4096     884      671     1064    1253     502290    541122
+pipe       4096     3298     2733    3080    234869   629975    728524
+unix       4096     4990     4183    6030    218765   711114    808896
+zcring     16384    3743     3589    3980    4270     467534    549699
+pipe       16384    6891     5570    7283    512993   1124581   1316468
+unix       16384    7873     6223    7779    631331   1118969   1313044
+zcring     16384    3754     3594    3996    4484     453920    549258
+pipe       16384    6288     5634    7069    155855   502456    506331
+unix       16384    7191     6190    7617    317891   1100752   1295369
+zcring     16384    3709     3591    3985    4278     457187    531265
+pipe       16384    6874     5589    7582    454775   918255    1111427
+unix       16384    6995     6202    7796    114955   1094279   1288883
+zcring     16384    3769     3592    3973    4212     505925    538033
+pipe       16384    6447     5643    7785    151534   927685    1119645
+unix       16384    6530     6197    7865    58249    482688    564205
+zcring     16384    3783     3590    3995    6705     494794    524984
+pipe       16384    6679     5610    7532    224908   859312    956410
+unix       16384    7127     6221    7795    373870   814178    870193
+zcring     65536    13122    13007   14590   16597    489235    528172
+pipe       65536    20167    17193   136621  207838   1128792   1299641
+unix       65536    15082    13011   35612   623871   1217386   1333413
+zcring     65536    13110    12996   14559   16269    453328    548945
+pipe       65536    21193    17186   160580  383555   1196877   1306823
+unix       65536    15207    13063   43201   639067   1133552   1312601
+zcring     65536    13091    12994   14538   16283    110755    509311
+pipe       65536    19698    17205   112031  196272   798832    908396
+unix       65536    14334    12973   29945   476436   806831    917335
+zcring     65536    13341    13015   14590   51215    533681    561801
+pipe       65536    20031    17215   116588  213149   866590    1356517
+unix       65536    14869    12977   37552   569959   1146418   1262698
+zcring     65536    13131    13012   14494   15923    457009    574408
+pipe       65536    19856    17208   118046  199536   1186432   1399264
+unix       65536    14879    13009   37136   557348   1289419   1406168
+zcring     262144   47047    46508   48504   52249    553094    553094
+pipe       262144   86824    74088   251470  2476364  2946302   2946302
+unix       262144   33845    31818   62715   566627   821492    821492
+zcring     262144   47147    47010   49684   62797    170361    170361
+pipe       262144   80922    73694   249606  302966   614202    614202
+unix       262144   35482    31628   64203   820043   1160688   1160688
+zcring     262144   46485    46421   48546   55610    56546     56546
+pipe       262144   82894    73668   251559  1177462  1370108   1370108
+unix       262144   32891    31535   60872   72653    555453    555453
+zcring     262144   46700    46406   48266   54607    521732    521732
+pipe       262144   83207    74096   259799  394531   1557029   1557029
+unix       262144   33278    31872   63497   193299   567175    567175
+zcring     262144   46614    46414   49830   70747    199620    199620
+pipe       262144   82147    73839   245303  545172   1426857   1426857
+unix       262144   33137    31497   61306   250235   501309    501309
+zcring     1048576  181392   181073  188914  219052   219052    219052
+pipe       1048576  378404   345093  643482  1188408  1188408   1188408
+unix       1048576  159954   155706  199870  254939   254939    254939
+zcring     1048576  181800   181517  190611  216177   216177    216177
+pipe       1048576  371649   342326  539865  1498866  1498866   1498866
+unix       1048576  158152   152714  197278  775903   775903    775903
+zcring     1048576  184709   183855  208042  222509   222509    222509
+pipe       1048576  373823   343197  538086  1802675  1802675   1802675
+unix       1048576  159149   154314  203646  245541   245541    245541
+zcring     1048576  183273   183047  189779  209984   209984    209984
+pipe       1048576  380571   348628  546236  1247506  1247506   1247506
+unix       1048576  158263   151989  196361  1104232  1104232   1104232
+zcring     1048576  183851   183617  188586  211926   211926    211926
+pipe       1048576  374680   344160  534580  1634637  1634637   1634637
+unix       1048576  157785   151786  193608  1023714  1023714   1023714
