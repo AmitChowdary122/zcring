@@ -247,8 +247,8 @@ bullets(ax, [
 ], y=71, x=6, size=12.5, step=5.2, wrap=46, lead_gap=3.9)
 bullets(ax, [
  "**Bias correction.** Waits that end in a block are censored samples. The producer stamps the wake time, which recovers the true arrival and stops the estimator being pushed toward spinning by the very outcome that should not do that.",
- "**Floor.** Ski-rental: S >= measured wake cost. 2-competitive and distribution-free, so the learner can never do worse than the classical bound.",
- "**Exploration.** Epsilon-greedy, because the greedy policy censors its own observations and cannot tell a gap just past S from one a hundred times past it. Cost bounded and charged to the same budget.",
+ "**Floor.** Ski-rental: S >= measured wake cost. Rules out the one unambiguously wrong call - blocking below break-even. It does not make the policy 2-competitive, and we do not claim that.",
+ "**Exploration.** Epsilon-greedy: the greedy policy censors its own observations and cannot tell a gap just past S from one far past it. Cost bounded, charged to the same budget.",
 ], y=71, x=52, size=12.5, step=5.2, wrap=46, lead_gap=3.9)
 note(ax, "Model type: inbuilt. Measured convergence at 100 µs pacing: gap estimate 97.8 µs, wake cost 2.07 µs, exploration 0.82% against a nominal 0.78%.\n"
          "At 1 MiB the same estimator learned 185 µs — the real inter-arrival, not the nominal pacing. That is the difference between measuring and configuring.")

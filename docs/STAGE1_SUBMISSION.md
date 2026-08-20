@@ -102,10 +102,16 @@ with an online-learned wake policy."
 >
 > The loss **inverts**. At 1 MiB zcring's p50 falls from 183 µs to 44 µs while
 > the UNIX socket barely moves (155 µs → 136 µs), and the p50 reproduces to
-> three significant figures across all five repetitions. The disclosed
-> weakness was a property of one platform, not of the design — which is what
-> the four negative hypotheses predicted, now confirmed on independent
-> hardware rather than argued.
+> three significant figures across all five repetitions.
+>
+> Stated precisely, because the distinction is the point: this is **strong
+> evidence, not proof**. The Intel machine no longer exists, so this was not a
+> controlled A/B, and the two parts differ in per-core memory bandwidth,
+> fabric clock and prefetch behaviour independently of anything tested. What
+> the result supports is that **the cost tracks platform memory and frequency
+> behaviour rather than the transport design** — four code-side explanations
+> were each tested and failed, and the one remaining class of explanation made
+> a prediction that independent hardware bore out.
 >
 > The headline claims in this submission remain anchored to the Intel part,
 > because 2–4 cores is representative of embedded deployment and the Zen part
@@ -152,9 +158,10 @@ with an online-learned wake policy."
 > about a distribution the framework cannot know at build time. zcring learns
 > it per consumer from the observed inter-arrival distribution, as a
 > constrained optimisation — minimise wake latency subject to a CPU budget —
-> using a Robbins–Monro quantile update, a ski-rental 2-competitive floor
-> derived from the *measured* wake cost, ε-greedy exploration, and
-> de-biasing of censored samples via a producer-side timestamp. The full
+> using a Robbins–Monro quantile update, a floor derived from the *measured*
+> block-and-wake cost by the classical ski-rental argument, ε-greedy
+> exploration, and de-biasing of censored samples via a producer-side
+> timestamp. The full
 > derivation is in `src/zcring.h` §§5–10 and the policy is shown tracking a
 > mid-run distribution shift in `docs/adaptive_trace.pdf`.
 >

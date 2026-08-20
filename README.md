@@ -71,11 +71,17 @@ observes.** The full derivation is in `src/zcring.h` §§5–10; the shape of it
   de-censors the arrival sample — otherwise every blocked wait would report
   `X+W` instead of `X` and the estimator would be pushed toward spinning by
   precisely the outcome that should not do that.
-- **A ski-rental floor bounds the worst case.** `S ≥ W` always. Spinning for
-  the block-and-wake cost is the classical 2-competitive threshold and needs no
-  distribution at all; the learned quantile is what improves on it when the
-  traffic turns out to be predictable, and the floor is what stops the learner
-  from ever doing worse.
+- **A ski-rental floor rules out the one unambiguously wrong decision.**
+  `S ≥ W` always. Spinning for the block-and-wake cost is the classical
+  2-competitive threshold and needs no distribution at all, and the floor
+  stops the learner ever blocking below break-even — where blocking adds `W`
+  of latency to save less than `W` of spinning.
+  **It does not make the policy 2-competitive, and we do not claim that.**
+  Competitiveness comes from spinning *exactly* `W`; the learner routinely
+  goes above it, and once `S > W` the worst case is `1 + S/W`. That trade is
+  deliberate: a distribution-free worst-case bound is exchanged for a
+  distribution-dependent expected-case win, which is the entire reason to
+  learn `F` rather than just spin for `W`. See `src/zcring.h` §7.
 - **Exploration is load-bearing, not decoration.** The greedy policy censors
   its own observations: it can never tell "6% of gaps land just past S" (raise
   S, almost free) from "6% of gaps are 100× S" (raising S is pure waste). With
@@ -293,11 +299,19 @@ the C-state trade-off (below) and the fan-out scaling (further below) are.
 > UNIX socket barely moves, 155 µs → 136 µs. The p50 reproduces to three
 > significant figures across all five repetitions.
 >
+> **This is strong evidence, not proof, and the difference matters.** The i3
+> cannot be re-run, so this was never a controlled A/B — the two parts differ
+> in per-core memory bandwidth, fabric clock and prefetch behaviour
+> independently of anything that was tested. 183 µs for 1 MiB is ≈5.7 GB/s,
+> which is a memory-bandwidth-shaped number. The defensible claim is that
+> **the cost tracks platform memory and frequency behaviour rather than the
+> transport design** — not that a specific mechanism was isolated.
+>
 > So the honest statement is: *on this embedded-class Intel part, and under
 > the C-state configuration the determinism claim requires, large single-
-> consumer transfers cost more than a socket. That is a platform interaction,
-> not a property of the design, and a second microarchitecture shows the
-> mechanism reversing.*
+> consumer transfers cost more than a socket. A second microarchitecture
+> reverses that outcome, which is what four eliminated code-side hypotheses
+> predicted.*
 >
 > **The headline claims in this README remain anchored to the i3** — 2–4
 > cores is representative of embedded deployment, and an 8C/16T desktop part
@@ -395,16 +409,20 @@ was identified and fully explained along the way (blocking consumers, of *any*
 transport, pay idle-state exit latency on wake; this is why disabling C-states
 is a determinism requirement rather than a preference).
 
-**Test five settled it.** With every code-side explanation eliminated, the
-surviving hypothesis was that the cost is a platform property — uncore or
-memory-controller frequency, or a turbo/RAPL budget a never-fully-idle package
-cannot reach. The direct test of that is to change the platform. The box at
-the top of this section is the result: **on AMD Zen the loss inverts to 3.08×
-at 1 MiB.** The prediction held.
+**Test five: change the platform.** With every code-side explanation
+eliminated, the surviving hypothesis was that the cost is a platform property
+— uncore or memory-controller frequency, per-core bandwidth, or a turbo/RAPL
+budget a never-fully-idle package cannot reach. Changing the platform is the
+most direct test available. The box at the top of this section is the result:
+**on AMD Zen the loss inverts to 3.08× at 1 MiB.** The prediction held.
 
-This is worth stating as a method rather than a number. A limitation was
-disclosed, four explanations were proposed and each killed by measurement, the
-survivor made a falsifiable prediction, and independent hardware confirmed it.
+**Four eliminations plus one confirmed prediction is not a proof.** The i3 is
+gone, so this was not a controlled A/B, and the surviving hypothesis names a
+family of platform effects rather than one isolated mechanism. What can be
+said is that four code-side explanations were each tested and failed, and the
+one remaining class of explanation made a prediction that independent hardware
+then bore out. That is where the evidence stops, and this section stops there
+too.
 The historical "1.47× at 1 MiB" figure from an earlier draft was measured
 under a C-state configuration that predates and conflicts with the
 tail-latency fix — it is superseded, not reconciled, by the tables here.

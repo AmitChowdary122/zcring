@@ -339,10 +339,31 @@
  * off cost W. The 2-competitive threshold is to spin for exactly W before
  * blocking, and it requires no knowledge of F at all. zcring enforces
  * S >= wake_ewma for that reason: below the break-even point, blocking cannot
- * pay for itself — it adds W of latency to save less than W of spinning. The
- * learned quantile is what improves on the distribution-free 2-competitive
- * guarantee when F turns out to be predictable; the floor is what stops the
- * learner from ever doing worse than it.
+ * pay for itself — it adds W of latency to save less than W of spinning.
+ *
+ * Be precise about what that floor does and does not buy, because it is easy
+ * to claim too much here and the overclaim is checkable.
+ *
+ * Ski-rental's 2-competitiveness comes from spinning for *exactly* W. The
+ * floor only enforces the lower half of that, S >= W, and the learner
+ * routinely pushes S well above it. Once S > W the worst case — a message
+ * that does not arrive during the spin — costs S + W against an optimal W,
+ * i.e. a competitive ratio of 1 + S/W, which exceeds 2 as soon as S exceeds
+ * W. So this policy is NOT 2-competitive, and the floor does not make it so.
+ *
+ * What the floor actually guarantees is the elimination of one specific
+ * failure mode: the learner can never choose to block when blocking is
+ * unambiguously the wrong call, which is exactly the regime where a badly
+ * chosen constant does its worst damage. Spinning past W is the opposite
+ * risk, and it is taken *deliberately* — the quantile estimate says the
+ * message arrives before S with probability F(S), and §5's objective prices
+ * that against the CPU budget. Trading a distribution-free worst-case bound
+ * for a distribution-dependent expected-case win is the whole point of
+ * learning F at all; a policy that refused the trade would just be
+ * spin-exactly-W, and would need no learner.
+ *
+ * Ski-rental is therefore the *justification for the floor*, not a bound on
+ * the policy. State it that way.
  *
  * The floor also produces the right behaviour at the two ends of the rate
  * range without any special-casing, which is worth stating because it is the

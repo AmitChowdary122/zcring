@@ -85,12 +85,18 @@ The i3's large-payload loss (0.68× at 256 KiB, 0.84× at 1 MiB) **inverts on
 Zen** — 3.62× and 3.08×. zcring's 1 MiB p50 falls 183 µs → 44 µs while the
 UNIX socket barely moves, 155 µs → 136 µs.
 
-This is the fifth and decisive test of that gap. Offered rate, thermal state,
-busy-spin power draw and TLB pressure were each tested and each came back
-negative, leaving platform power/frequency behaviour as the only remaining
-candidate. A different platform was the direct test of that prediction, and it
-confirmed it. The disclosed weakness is a property of one CPU, not of the
-design.
+This is the fifth test of that gap. Offered rate, thermal state, busy-spin
+power draw and TLB pressure were each tested and each came back negative,
+leaving platform power/frequency behaviour as the only remaining candidate. A
+different platform was the most direct test available, and the prediction
+held.
+
+**Evidence, not proof.** The i3 is gone, so this was never a controlled A/B,
+and the two parts differ in per-core memory bandwidth, fabric clock and
+prefetch independently of anything tested — 183 µs at 1 MiB is ≈5.7 GB/s, a
+memory-bandwidth-shaped number. Claim that **the cost tracks platform memory
+and frequency behaviour rather than the transport design**; do not claim an
+isolated mechanism.
 
 Nothing else in this directory was measured on the Ryzen. If that changes, add
 the rows above in the same commit as the data.

@@ -51,9 +51,17 @@ five reps.
 This was the **fifth** test of that gap. Offered rate, thermal state,
 busy-spin power draw and TLB pressure all came back negative, leaving
 "platform power/frequency behaviour" as the only surviving candidate. Running
-the identical sweep on a different microarchitecture was the direct test of
-that prediction and it confirmed it. **The disclosed weakness is a property of
-one CPU, not of this code.** Update any doc that still frames it otherwise.
+the identical sweep on a different microarchitecture was the most direct test
+available, and the prediction held.
+
+**State this as evidence, not proof.** The i3 is gone, so this was never a
+controlled A/B; the two parts differ in per-core memory bandwidth, fabric
+clock and prefetch independently of anything tested, and 183 µs at 1 MiB is
+≈5.7 GB/s — a memory-bandwidth-shaped number. The defensible claim is that
+**the cost tracks platform memory and frequency behaviour rather than the
+transport design**, not that a mechanism was isolated. An earlier version of
+this section said "a property of one CPU, not of this code" — that was
+stronger than the evidence supports.
 
 **Do not re-anchor the headline claims to the Ryzen.** 2–4 cores is what
 embedded deployment looks like; "the numbers got bigger on a bigger CPU" is
@@ -472,9 +480,15 @@ Design decisions that a later session must not silently undo:
   split is the whole argument. Do not add a configurable spin constant "for
   convenience" — it re-opens exactly the criticism this work exists to close.
 - **The ski-rental floor `S ≥ measured wake cost` is load-bearing.** It is
-  what makes fast-arrival traffic stay syscall-free automatically and what
-  bounds the learner's worst case by the distribution-free 2-competitive
-  policy. Removing it would make the policy pathological at high message rates.
+  what makes fast-arrival traffic stay syscall-free automatically, and it rules
+  out the one unambiguously wrong decision — blocking below break-even.
+  Removing it would make the policy pathological at high message rates.
+  **It does NOT make the policy 2-competitive.** Ski-rental's bound requires
+  spinning *exactly* W; the learner goes above W and the worst case is then
+  `1 + S/W`. Earlier wording in this file, README.md and the deck claimed the
+  floor "bounds the learner's worst case by the 2-competitive policy" — that
+  was wrong and is corrected. Ski-rental justifies the floor; it does not bound
+  the policy. `src/zcring.h` §7 has the corrected argument.
 - **Exploration is not decoration.** The greedy policy censors its own
   observations. §8 of the header explains why; a reviewer asking "why is there
   an ε here" needs that answer and it is written down.
