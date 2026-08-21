@@ -191,5 +191,5 @@ A live visual pipeline: synthesized video frames or sensor data flowing producer
 1. **Cut from the top, never the middle.** A complete Layer 1–2 beats a broken Layer 1–4.
 2. **A measured number beats a claimed one**, everywhere — abstract, slides, answers.
 3. **The presentation is the product.** Code that cannot be shown in ten minutes did not happen.
-4. **Acknowledge limitations before judges find them.** It converts a weakness into evidence of rigor.
+4. **State limitations plainly, in the same place as the claim.** A submission that does not know its own limits is wrong about itself, whoever reads it.
 5. **Score against the rubric, not against your own taste.** Innovation, feasibility, scalability, impact. Work that advances none of the four is work that does not count, however satisfying it is to build.

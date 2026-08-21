@@ -322,20 +322,3 @@ with an online-learned wake policy."
 `git rm -r --cached vault/`, re-add `vault/` to `.gitignore`, commit.
 
 ---
-
-## Notes for whoever fills the form
-
-- **Say "dual-core with SMT", never "quad-core".** `nproc` reports 4 on the
-  measurement machine; `lscpu` shows 2 cores per socket.
-- **Never quote a small-message ratio without its waiter posture.** 16.8× is
-  spin/dedicated-core; blocking is 0.93×.
-- **Do not quote 19.6× or an "18–20×" range.** Those came from the Layer 1
-  revision; the shipped code gives 16.8×.
-- **State the large-payload loss before anyone asks.** It is disclosed in the
-  Description above deliberately and should stay there.
-- **Do not claim fan-out growth past N=2.**
-- **Do not present Layer 3 as built.** It is designed and specified.
-- If a field has a hard character limit, cut from the Description's
-  measurement tables first — they are reproduced in the deck and README — and
-  keep the camera-pipeline opening, which is the part a non-specialist
-  understands immediately.

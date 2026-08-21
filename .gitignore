@@ -6,22 +6,11 @@ perf.data*
 .idea/
 
 # results/ is deliberately NOT ignored — raw benchmark data belongs in the
-# repo. Reproducibility counts as feasibility in the rubric, and judges may
-# ask to see the numbers behind a claim.
+# repo. A performance claim whose raw data is not published is not checkable.
 
 # scratch previews from docs/deck.py rendering — never committed
 .deckpreview/
 
-# Private working-memory vault: an index over this repo's own memory
-# (STATUS.md, reports.txt, README.md), not a source of truth.
-#
-# It IS committed, deliberately — as of 14 Aug the Ubuntu SSD dual-boots in
-# the same laptop and sessions move between the two, so a Windows-only vault
-# would arrive empty on the machine doing the work.
-#
-# BEFORE MAKING THIS REPO PUBLIC AT SUBMISSION, untrack it:
-#     git rm -r --cached vault/
-#     # then re-add the line `vault/` below this comment block
-# The files stay on disk; the working tree stops showing them. See
-# vault/00-how-i-use-this.md.
+# Private working notes, not part of the project.
 vault/
+CLAUDE.md
