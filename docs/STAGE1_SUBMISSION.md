@@ -120,9 +120,9 @@ with an online-learned wake policy."
 > three significant figures across all five repetitions.
 >
 > Stated precisely, because the distinction is the point: this is **strong
-> evidence, not proof**. The Intel machine no longer exists, so this was not a
-> controlled A/B, and the two parts differ in per-core memory bandwidth,
-> fabric clock and prefetch behaviour independently of anything tested. What
+> evidence, not proof**. It is not a controlled A/B: the two parts differ in
+> per-core memory bandwidth, fabric clock and prefetch behaviour independently
+> of anything tested. What
 > the result supports is that **the cost tracks platform memory and frequency
 > behaviour rather than the transport design** — four code-side explanations
 > were each tested and failed, and the one remaining class of explanation made
@@ -151,6 +151,21 @@ with an online-learned wake policy."
 > idle governor happened to choose C3 during that run. The effect has since
 > been confirmed cross-vendor on AMD (350 µs C3 exit), so it is a property of
 > the platform class rather than an Intel quirk.
+>
+> **The zero-copy claim is demonstrated, not asserted.** `perf` profiles of
+> both transports at 64 KiB are committed (`results/perf_proof.txt`): the
+> UNIX-socket control shows `_copy_to_iter` at 7.8% and `_copy_from_iter` at
+> 2.8%, while zcring's profile contains **no copy symbol in 88 symbol rows**.
+> The control is what makes it a proof rather than an absence — the method
+> demonstrably detects a real copy, then does not find one on our path.
+>
+> **Robustness.** A consumer that dies is evicted so it cannot gate the ring
+> forever; a producer killed *between* `reserve` and `commit` no longer leaks
+> its slot, in both unicast and broadcast mode. Both are verified by tests
+> that actually `SIGKILL` a peer rather than simulating the condition, with
+> measured recovery of 324 ns and 452 ns. Distinguishing a dead peer from a
+> merely descheduled one is the harder half and is tested separately, since
+> reclaiming from a live producer would corrupt the ring.
 >
 > **Correctness and reproducibility.** Exactly-once delivery is verified
 > across 4 producers × 4 consumers over 200,000 messages and across process

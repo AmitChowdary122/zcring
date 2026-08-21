@@ -1,10 +1,19 @@
 # zcring — zero-copy shared-memory IPC framework
 
-Layers 1–2 of the plan in [PLAN.md](PLAN.md): a lock-free MPMC ring over a
-memfd-backed shared mapping, with `reserve`/`commit` and `acquire`/`release`
-handing back raw pointers into shared memory for in-place construction and
-reading, plus a broadcast fan-out mode where N consumers each see every
-message. No `memcpy` in the data path.
+A lock-free MPMC ring over a memfd-backed shared mapping, with
+`reserve`/`commit` and `acquire`/`release` handing back raw pointers into
+shared memory for in-place construction and reading, plus a broadcast fan-out
+mode where N consumers each see every message. No `memcpy` in the data path —
+**and that is demonstrated, not asserted**: `results/perf_proof.txt` profiles
+both transports and finds copy symbols in the UNIX-socket control while
+finding none in 88 symbol rows on zcring's path.
+
+Against the layered plan in [PLAN.md](PLAN.md): **Layer 1 complete** (ring,
+in-place construction, and the `perf` proof obligation it set). **Layer 2 is
+three of four** — adaptive notification, broadcast fan-out, and crash
+recovery for both dead consumers *and* dead producers are done; the
+`eventfd`/`epoll` bridge is not. Layer 3 is designed (`docs/LAYER3_DESIGN.md`)
+and deliberately unbuilt. Layer 4 is untouched.
 
 ```
 make            # build
@@ -749,11 +758,12 @@ Open problem #3, the same hardware ceiling as N=4 fan-out.
 via `zc_bcast_reap()`, and adaptive spin-then-futex notification with an
 online-learned spin budget (above).
 
-- **The measurement machine no longer exists.** The i3-1115G4 failed on
-  14 Aug; every canonical dataset here came from it. Valid as measured, not
-  reproducible by us on demand. `scripts/lib.sh:check_machine()` refuses to
-  write a canonical dataset filename on a different CPU. Full statement in
-  `results/PROVENANCE.md`.
+- **The measurement machine failed and was recovered.** The i3-1115G4 died on
+  14 Aug (drive fault) and was revived on 20 Aug; the canonical datasets were
+  then re-measured on it against current code.
+  `scripts/lib.sh:check_machine()` refuses to write a canonical dataset
+  filename on a different CPU — note it *passes* on the i3, so `OUT_SUFFIX`
+  discipline is manual. Full statement in `results/PROVENANCE.md`.
 - **No Ryzen tail statistic is quotable.** `results/sweep_ryzen.csv` has a
   rock-solid p50 and a bimodal p99.99 across reps — external interference on
   an unquieted desktop, not transport behaviour. p50 only, until a quiesced
@@ -766,10 +776,17 @@ online-learned spin budget (above).
   is paced by an external clock and a producer that stalls on a full ring has
   a sizing problem that notification would hide rather than fix
   (`src/zcring.h` §10).
-- **Producer-side crash recovery is still absent.** A *producer* dying
-  mid-`reserve` leaks that slot — `zc_bcast_reap()` recovers dead consumers
-  only. Consumer death is the more common failure and the one that could
-  deadlock the ring, which is why it came first.
+- ~~Producer-side crash recovery~~ — **done 21 Aug** (`src/zcring.h` §13).
+  A producer killed between `reserve` and `commit` no longer leaks the slot,
+  in both unicast and broadcast mode. Verified by tests that actually
+  `SIGKILL` a producer mid-`reserve` rather than simulating it; measured
+  recovery 324 ns unicast, 452 ns broadcast. The death-versus-slowness
+  distinction is tested separately — reclaiming from a merely descheduled
+  producer would corrupt the ring, so *not* reclaiming is the harder half.
+  **The shared layout is byte-identical** (`sizeof(zc_ctrl_t)` still 1344,
+  `zc_slot_t` still 16, `head`/`tail` still at 64/128), so every committed
+  dataset remains valid — the new state was fitted into existing padding, as
+  `wake_ts` was in §9.
 - **Fan-out growth past N=2 is not claimed, and not because of the hardware.**
   In broadcast mode every consumer runs on every message, so consumer count is
   bounded by core count on *any* platform — one producer plus four consumers

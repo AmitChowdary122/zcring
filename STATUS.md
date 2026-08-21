@@ -1,6 +1,6 @@
 # STATUS — session handoff
 
-Last updated: **14 Aug 2026**. Read this after `CONTEXT.md` and before doing
+Last updated: **21 Aug 2026**. Read this after `CONTEXT.md` and before doing
 anything. It records decisions and open problems that exist nowhere in the
 code, and that a fresh session will otherwise get wrong.
 
@@ -115,8 +115,8 @@ busy-spin power draw and TLB pressure all came back negative, leaving
 the identical sweep on a different microarchitecture was the most direct test
 available, and the prediction held.
 
-**State this as evidence, not proof.** The i3 is gone, so this was never a
-controlled A/B; the two parts differ in per-core memory bandwidth, fabric
+**State this as evidence, not proof.** This is not a controlled A/B: the two
+parts differ in per-core memory bandwidth, fabric
 clock and prefetch independently of anything tested, and 183 µs at 1 MiB is
 ≈5.7 GB/s — a memory-bandwidth-shaped number. The defensible claim is that
 **the cost tracks platform memory and frequency behaviour rather than the
@@ -845,9 +845,11 @@ to be reserved when they run. Full writeup: `reports.txt` §29.
    representative of an embedded problem statement, not more. The crossover
    sits at N=2, which fits on every embedded part there is. Do not reinstate
    this item.
-8. `eventfd`/`epoll` bridge (the remaining piece of Layer 2 notification);
-   producer crash recovery; determinism rigor (isolcpus / nohz_full /
+8. `eventfd`/`epoll` bridge — the last remaining piece of Layer 2, and the
+   least valuable of the four (composability is an adoption story, not a
+   scored criterion). Then: determinism rigor (isolcpus / nohz_full /
    PREEMPT_RT); iceoryx and ZeroMQ comparators; presentation.
+   ~~Producer crash recovery~~ done 21 Aug — see above.
 
 `reports.txt` holds the full Layer 1 and Layer 2 session reports, including
 the fan-out design rationale and the bufferbloat analysis in §12. Note that
