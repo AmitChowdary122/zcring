@@ -365,6 +365,46 @@
  * Ski-rental is therefore the *justification for the floor*, not a bound on
  * the policy. State it that way.
  *
+ * ---------------------------------------------------------------------------
+ * 7a. Where this policy actually pays — and where it does not
+ * ---------------------------------------------------------------------------
+ *
+ * Tested, and the result constrains the claim. A counterfactual replay over
+ * the committed traces (see README, "Does the learned budget actually beat a
+ * constant?") scores every fixed budget against the identical arrival
+ * sequence the learner saw. On every workload this project's harness can
+ * generate, **a fixed budget matches or beats the learned one**: equal added
+ * latency at 20% less CPU on the whole trace, and a 0.5-8us constant winning
+ * in each individual phase.
+ *
+ * The reason is regime, not algorithm. Everything reduces to the ratio of the
+ * inter-arrival gap X to the block-and-wake cost W:
+ *
+ *   X >> W    blocking immediately is optimal. Spinning cannot recover more
+ *             latency than W, and costs up to X of CPU to try. Any small S
+ *             wins, and the learner's exploration is pure overhead. The
+ *             harness floors out at a median gap of ~52us against a measured
+ *             W of 2.27us, so every trace here is 23-110x W and lives
+ *             entirely in this regime.
+ *   X ~ W     the decision is genuinely uncertain and a wrong constant is
+ *             expensive in both directions. This is the regime the derivation
+ *             in 5-7 is about, and it is where an adaptive budget should
+ *             earn its keep. It corresponds to roughly 100kHz+ message rates
+ *             -- high-rate IMUs, SDR sample streams, tight control loops --
+ *             which are real embedded workloads but ones this harness cannot
+ *             produce, because per-wait bookkeeping dominates below ~50us.
+ *   X << W    never block; the floor S >= W already guarantees this.
+ *
+ * So the defensible claim is narrower than "adaptive beats fixed". It is:
+ * the budget is *derived from measurement rather than configured*, it
+ * demonstrably tracks a shifting arrival process, and it removes a constant
+ * that is wrong on every machine it was not tuned for. Superiority over a
+ * well-chosen constant is *predicted by the derivation in the X ~ W regime
+ * and not demonstrated here*, because the regime was unreachable.
+ *
+ * Do not quietly restore the stronger claim. The replay is reproducible from
+ * the committed CSVs by anyone who wants to check it.
+ *
  * The floor also produces the right behaviour at the two ends of the rate
  * range without any special-casing, which is worth stating because it is the
  * property a fixed constant cannot have:

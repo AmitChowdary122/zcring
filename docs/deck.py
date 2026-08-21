@@ -239,7 +239,7 @@ pdf.savefig(fig); plt.close(fig)
 
 # ---------------------------------------------------- 8. adaptive policy ----
 fig, ax = slide(pdf, "The notification threshold is learned, not configured",
-                "An online-learned policy where a fixed constant cannot work")
+                "The budget is measured, not configured - and we tested where that pays")
 bullets(ax, [
  "**The decision.** A consumer waiting on an empty ring must choose a spin budget S before observing the idle gap. Spin too long and CPU is wasted; spin too little and every message pays the block-and-wake cost.",
  "**The objective is constrained, not scalarised.** Minimise expected added latency W(1-F(S)) subject to expected spin cost <= beta*E[X]. Beta - the fraction of an idle gap the deployment will spend spinning - is the only input. Everything else is measured.",
@@ -250,8 +250,9 @@ bullets(ax, [
  "**Floor.** Ski-rental: S >= measured wake cost. Rules out the one unambiguously wrong call - blocking below break-even. It does not make the policy 2-competitive, and we do not claim that.",
  "**Exploration.** Epsilon-greedy: the greedy policy censors its own observations and cannot tell a gap just past S from one far past it. Cost bounded, charged to the same budget.",
 ], y=71, x=52, size=12.5, step=5.2, wrap=46, lead_gap=3.9)
-note(ax, "Model type: inbuilt. Measured convergence at 100 µs pacing: gap estimate 97.8 µs, wake cost 2.07 µs, exploration 0.82% against a nominal 0.78%.\n"
-         "At 1 MiB the same estimator learned 185 µs — the real inter-arrival, not the nominal pacing. That is the difference between measuring and configuring.")
+note(ax, "Model type: inbuilt. Convergence at 100 µs pacing: gap estimate 97.8 µs, wake cost 2.07 µs, exploration 0.82% vs a nominal 0.78%.\n"
+         "Tested honestly: a counterfactual replay over the committed traces shows a well-chosen constant matches this on every workload our harness can\n"
+         "generate — gaps there run 23-110x the wake cost, where blocking is optimal. We claim a derived parameter, not superiority over a good constant.", y=7)
 pdf.savefig(fig); plt.close(fig)
 
 # ------------------------------------------------------------- 9. method ----

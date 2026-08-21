@@ -49,7 +49,44 @@ the measurement.
 
 **Both canonical datasets are now current. `src/zcring.h` and `src/zcring.c`
 are frozen** — any change to the ring invalidates every dataset, which is
-exactly how the sweep went stale by 16 ns without anyone noticing.
+exactly how the sweep went stale by 16 ns without anyone noticing. (§7a was
+added to the header afterwards; it is comment-only and cannot change the
+binary, but it was compile-checked before being trusted.)
+
+## The adaptive policy does NOT beat a fixed constant here — tested 20 Aug
+
+Read this before quoting anything about the learned budget.
+
+A counterfactual replay over `results/adaptive_trace*.csv` — scoring every
+fixed budget against the identical arrival sequence, with censored samples
+de-biased — says a constant **dominates** the learned policy on every workload
+this harness can generate:
+
+| policy | added latency | CPU burn |
+|---|---|---|
+| learned | 2.480 µs | 9.878 µs |
+| fixed S = 8 µs | 2.473 µs | **7.973 µs** |
+
+Per phase the best fixed budget is 0.5–8 µs in all three.
+
+**The cause is regime, not algorithm.** Measured W = 2.27 µs; the harness
+floors out at a ~52 µs median inter-arrival because per-wait bookkeeping
+dominates below that. So every trace sits at 23–110× W, where blocking
+immediately is optimal and spinning cannot help. A second trace was run
+specifically to reach the X≈W regime (`GAP1=2 GAP2=20 GAP3=200`,
+`adaptive_trace_nearw.csv`) and **the requested gaps did not materialise** —
+2 µs requested came out at 52.7 µs.
+
+**What is claimed now:** the budget is derived from measurement rather than
+configured, and it tracks a shifting arrival process. Superiority over a
+well-chosen constant is predicted by the derivation in the X≈W regime and
+**not demonstrated**. Written into `README.md`, `src/zcring.h` §7a and the
+form text. **Do not quietly restore the stronger claim** — the replay is
+reproducible from committed CSVs by anyone.
+
+**If this is ever revisited:** the blocker is harness overhead, not the
+policy. Sampling every Nth wait instead of every wait would lower the
+inter-arrival floor and might reach X≈W. That is Stage 2 work.
 
 `scripts/lib.sh:check_machine()` refuses to write a canonical dataset filename
 on a non-i3 CPU. It passes on the revived i3, so **`OUT_SUFFIX` discipline is

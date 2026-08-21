@@ -265,11 +265,27 @@ with an online-learned wake policy."
 > An in-house, purpose-built online-learned policy rather than a pre-trained
 > or third-party model. The spin-then-block threshold is estimated at runtime
 > from the observed inter-arrival distribution by a constrained optimisation
-> with a measured objective, a ski-rental competitive floor and ε-greedy
-> exploration. It is load-bearing rather than decorative: the framework
-> genuinely requires this parameter, a fixed value is demonstrably wrong in
-> both directions when the arrival process shifts, and the derivation is in
-> the source header. No external dataset or pre-trained model is used.
+> with a measured objective, a floor derived from the classical ski-rental
+> argument, and ε-greedy exploration to de-censor its own observations. The
+> block-and-wake cost it optimises against is *measured*, not assumed. The
+> full derivation is in `src/zcring.h` §§5–10 and the policy is shown tracking
+> a mid-run distribution shift in `docs/adaptive_trace.pdf`. No external
+> dataset or pre-trained model is used.
+>
+> **The claim is deliberately narrow, and the limit was measured rather than
+> assumed.** A counterfactual replay against the committed traces — scoring
+> every fixed budget on the identical arrival sequence — shows that on every
+> workload our harness can generate, a *well-chosen constant matches or beats*
+> the learned budget. The reason is regime: the measured wake cost is 2.27 µs
+> while the achievable median inter-arrival floors at 52 µs, so gaps run
+> 23–110× the wake cost, and there blocking immediately is optimal. The policy
+> earns its keep only where inter-arrival approaches the wake cost (≈100 kHz
+> and above — high-rate IMUs, SDR streams, tight control loops), a regime this
+> harness cannot produce. So what is claimed is that the parameter is *derived
+> from measurement rather than configured*, and that it tracks a changing
+> arrival process; superiority over a well-chosen constant is predicted by the
+> derivation and **not** demonstrated here. The replay is reproducible from
+> the committed CSVs.
 
 ---
 

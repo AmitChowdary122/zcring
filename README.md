@@ -127,6 +127,52 @@ dedicated core* versus *latency at an idle CPU cost comparable to a socket* —
 and this repo reports them separately rather than blending them into one
 flattering number.
 
+### Does the learned budget actually beat a constant? Not on anything we can measure.
+
+The obvious challenge to an adaptive policy is "show me it beats a well-chosen
+constant." We tested that, and the honest answer is that **on every workload
+this harness can generate, it does not** — for a reason that is about the
+regime, not the algorithm.
+
+The test is a **counterfactual replay**, run entirely from committed data. The
+actual inter-arrival sequence is recoverable from the per-wait timestamps in
+`results/adaptive_trace*.csv`, so any fixed budget can be scored against the
+*identical* arrivals the learner saw: for each gap `X`, a budget `S` costs
+`min(X,S)` of CPU and adds `W` of latency whenever `X > S`. Censored samples
+are de-biased first, using the same `wake_ts` correction described above —
+skipping that step biases the replay exactly as it would bias the estimator.
+
+Whole trace, 5799 waits, phases at 2 / 20 / 200 µs requested:
+
+| policy | added latency | CPU burn |
+|---|---|---|
+| learned | 2.480 µs | 9.878 µs |
+| **fixed S = 8 µs** | **2.473 µs** | **7.973 µs** |
+
+A constant dominates — equal latency, 20% less CPU. Per phase it is starker:
+the best fixed budget is 0.5–8 µs in *all three*.
+
+**Why: the regime is wrong, and we could not reach the right one.** The
+measured block-and-wake cost is **W = 2.27 µs**, while the achievable median
+inter-arrival on this harness floors out at **52 µs** — per-wait bookkeeping
+swamps anything faster. So gaps run **23× to 110× W**, and when blocking costs
+2 µs to save a 50 µs wait, blocking immediately is simply optimal. Spinning
+buys nothing and the learner spends CPU discovering that.
+
+The policy earns its keep only where **inter-arrival approaches W** — roughly
+100 kHz and above, which is a real embedded regime (high-rate IMUs, SDR
+sample streams, motor-control loops) but one this harness cannot produce.
+
+**So the claim this repo makes is narrow and deliberate:** the budget is
+*derived* rather than configured, it demonstrably tracks a shifting arrival
+process (`docs/adaptive_trace.pdf`), and it removes a constant that would
+otherwise be wrong on every machine it was not tuned for. **It is not claimed
+to beat a well-chosen constant, because we could not demonstrate that.** The
+replay above is reproducible from the committed CSVs; anyone can check it.
+
+Note the replay is *conservative* toward the learner: it scores the recorded
+budget and ignores ε-greedy exploration, so the real CPU cost is higher still.
+
 ## Benchmark methodology, and the trap in it
 
 `bench` measures **one-way** latency: the producer stamps `CLOCK_MONOTONIC`
