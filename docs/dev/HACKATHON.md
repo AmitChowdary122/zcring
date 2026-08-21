@@ -1,3 +1,7 @@
+> **Internal working log.** The competition's published rules and
+> evaluation criteria, transcribed so requirements could be checked
+> against them during development.
+
 # HACKATHON.md — the official rules and requirements
 
 **This file outranks everything else in the repo.** `PLAN.md`, `README.md`,

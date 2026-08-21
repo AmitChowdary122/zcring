@@ -1,3 +1,9 @@
+zcring - internal development log
+=================================
+Chronological session reports kept as an audit trail for the
+measurements in results/. Not a description of the system; see
+README.md for that.
+
 zcring — bare-metal baseline report
 ===================================
 

@@ -107,7 +107,7 @@ if you skip them:
   guessing a fixed spin count. Keep the flag consistent across every row you
   intend to compare — and note that `results/fanout.csv` was measured under
   `--yield`, which no longer exists, so it cannot share a table with
-  `--notify` numbers (see `STATUS.md`).
+  `--notify` numbers (see `docs/dev/STATUS.md`).
 - **`--consumers` selects zcring's broadcast path even at N=1**, so fan-out
   rows are comparable to each other. Omitting it keeps the Layer 1 unicast
   path, which is what `sweep.csv` was measured with. The two are therefore not
@@ -212,7 +212,7 @@ heat) where pipe/unix block in `read()`. Running the sweep with
 `WAITER=notify` makes the zcring consumer block too and removes that
 asymmetry — but note that it does **not** remove the separate ~65–70%
 large-payload C-state cost, which was tested directly and is not caused by
-the waiter (`scripts/cstate_ab.sh`, `STATUS.md` Open problem #5 follow-up 2).
+the waiter (`scripts/cstate_ab.sh`, `docs/dev/STATUS.md` Open problem #5 follow-up 2).
 
 **Fix:** `scripts/lib.sh`'s `wait_for_cool()` checks the package thermal
 zone (`x86_pkg_temp`, falling back to `TCPU`) before starting each payload

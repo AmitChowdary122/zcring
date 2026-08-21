@@ -1,4 +1,4 @@
-perf profile: zero-copy proof obligation (PLAN.md line 117)
+perf profile: zero-copy proof obligation (../docs/dev/PLAN.md line 117)
 generated: 2026-08-21T12:49:57Z
 commit: bc276daf672d4734b8e06c70933fbec62d837868
 cpu: 11th Gen Intel(R) Core(TM) i3-1115G4 @ 3.00GHz

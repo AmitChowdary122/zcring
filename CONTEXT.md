@@ -1,15 +1,15 @@
 # CONTEXT.md — project context
 
-**Read `HACKATHON.md` first — it holds the official rules, the real submission
+**Read `docs/dev/HACKATHON.md` first — it holds the official rules, the real submission
 form, and the actual evaluation rubric, and it outranks every other file
 including this one.** Then this file, which is the summary that keeps a fresh
-session from making expensive mistakes. `PLAN.md` has the strategy, `README.md`
+session from making expensive mistakes. `docs/dev/PLAN.md` has the strategy, `README.md`
 the benchmark methodology, `RUNNING.md` the operational detail.
 
 ## How this project is worked
 
 Work is split between a planning pass that drafts scope and instructions and
-an implementation pass that builds and measures against them. `STATUS.md` is
+an implementation pass that builds and measures against them. `docs/dev/STATUS.md` is
 the authoritative build/measurement state and the handoff point between
 sessions — read it first. `vault/` is a local working-memory notebook; it is
 gitignored and not part of this repo's public history.
@@ -30,7 +30,7 @@ decisions must respect a single person's debugging bandwidth.
 | Date | What |
 |---|---|
 | **25 Aug 2026** | Abstract + problem-statement selection closes. **Real code freeze.** |
-| **~23–24 Aug** | **Stage 1 closes.** Portal showed ~400 h remaining on 7 Aug. This is a **full submission**, not an abstract: architecture diagram, PPT, public GitHub link, description/novelty/innovation text, demo video. See HACKATHON.md for every field. |
+| **~23–24 Aug** | **Stage 1 closes.** Portal showed ~400 h remaining on 7 Aug. This is a **full submission**, not an abstract: architecture diagram, PPT, public GitHub link, description/novelty/innovation text, demo video. See docs/dev/HACKATHON.md for every field. |
 | **~18–20 Aug** | *Self-imposed* target to have everything uploaded, leaving buffer. |
 | **1st week Sep** | Online presentation of the working prototype to judges. This is where the winner is decided. |
 
@@ -40,13 +40,13 @@ as the date everything must work by.
 
 ## Evaluation rubric
 
-See `HACKATHON.md` for the full rubric (innovation, feasibility, scalability,
+See `docs/dev/HACKATHON.md` for the full rubric (innovation, feasibility, scalability,
 impact, AI/technical approach, security, documentation, UX — the architecture
 diagram is scored directly). Two criteria shape the architecture here:
 
 - **AI/Technical Approach.** The adaptive spin-then-futex notification
   threshold, learned online from the observed inter-arrival distribution, is
-  the project's answer — see STATUS.md "Adaptive notification" and
+  the project's answer — see docs/dev/STATUS.md "Adaptive notification" and
   `src/zcring.h` §§5–10. It's an in-house, purpose-built online-learned
   policy (Model Type: Inbuilt Model on the submission form), not a bolted-on
   LLM.
@@ -175,7 +175,7 @@ suggest. Still gated on Layers 1–2 being solid.
 2. **Regenerate the fan-out sweep under `--notify`.** Removing `--yield` made
    `results/fanout.csv` historical — still valid as measured, no longer
    reproducible, and it is what the fan-out crossover claim rests on. Highest-
-   value measurement outstanding. See STATUS.md.
+   value measurement outstanding. See docs/dev/STATUS.md.
 3. ~~**Layer 2 — fan-out.**~~ **DONE.** One producer, N consumers,
    per-consumer cursors, zero copies for all.
 4. **Layer 2 — producer crash recovery.** A producer dying mid-`reserve`
@@ -193,7 +193,7 @@ suggest. Still gated on Layers 1–2 being solid.
 ## Persisting state across sessions
 
 No model remembers anything between sessions — the repo is the only memory.
-`STATUS.md` holds current state, open problems, decisions already made, and
+`docs/dev/STATUS.md` holds current state, open problems, decisions already made, and
 traps already hit; update it at the end of any working session, since a
 result reported only in chat is lost the moment the session closes. Design
 rationale goes in the relevant header, not in chat — `src/zcring.h` is the

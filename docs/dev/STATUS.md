@@ -1,3 +1,8 @@
+> **Internal working log.** Session-to-session handoff notes: open
+> problems, retracted claims and their reasons, and warnings to future
+> readers. Kept as an audit trail for the measurements in `results/`.
+> It is not a description of the system — see `README.md` for that.
+
 # STATUS — session handoff
 
 Last updated: **21 Aug 2026**. Read this after `CONTEXT.md` and before doing

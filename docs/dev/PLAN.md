@@ -1,3 +1,8 @@
+> **Internal working log.** The original month-long plan, kept unedited
+> so the delivered scope can be compared against the intended scope.
+> Several items here were deliberately cut; see `README.md` for what
+> actually exists.
+
 # Zero-Copy Shared-Memory IPC Framework — Master Plan
 
 **Hackathon:** SSM / CDAC — Next-Gen Kernel Hackathon

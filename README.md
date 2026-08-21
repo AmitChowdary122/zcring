@@ -8,7 +8,7 @@ mode where N consumers each see every message. No `memcpy` in the data path —
 both transports and finds copy symbols in the UNIX-socket control while
 finding none in 88 symbol rows on zcring's path.
 
-Against the layered plan in [PLAN.md](PLAN.md): **Layer 1 complete** (ring,
+Against the layered plan in [docs/dev/PLAN.md](docs/dev/PLAN.md): **Layer 1 complete** (ring,
 in-place construction, and the `perf` proof obligation it set). **Layer 2 is
 three of four** — adaptive notification, broadcast fan-out, and crash
 recovery for both dead consumers *and* dead producers are done; the
@@ -431,7 +431,7 @@ actually lives in — sensor readings, actuator commands, state updates.
 **Near parity at 64 KiB (1.01×), then zcring *loses* at 256 KiB–1 MiB
 (0.68×–0.84×).** This is not offered-rate sensitivity, and it is not thermal
 throttling (both were investigated and ruled out as the primary cause — see
-`RUNNING.md` §4b and `reports.txt` §19 for the thermal investigation).
+`RUNNING.md` §4b and `docs/dev/reports.txt` §19 for the thermal investigation).
 Isolated with a controlled A/B at 1 MiB, N=1, cool machine, identical
 config, varying only the C-state setting:
 
@@ -461,7 +461,7 @@ sleeps on 99%+ of messages.
 rate the committed dataset actually uses, because the two do not say the same
 thing. p50, mean of 3 reps:
 
-**gap 100 µs** (replicating `reports.txt` §22) → `results/cstate_waiter_ab.csv`
+**gap 100 µs** (replicating `docs/dev/reports.txt` §22) → `results/cstate_waiter_ab.csv`
 
 | waiter | C-states on | C-states off | change |
 |---|---|---|---|
@@ -644,13 +644,13 @@ the baseline the fan-out advantage is measured against.
 At 64 B, N=4 shows zcring jumping to 1.03 µs from ~120 ns at N=1/N=2 — this
 is the known spinner-oversubscription artifact (2 physical cores, N=4 means
 more spinning waiters than hardware threads) documented in `RUNNING.md` and
-`STATUS.md`, not a fan-out regression. `--yield` was the stopgap that
+`docs/dev/STATUS.md`, not a fan-out regression. `--yield` was the stopgap that
 partially masked it; adaptive spin-then-futex notification is now the real
 fix, and quantifying how much of that 1.03 µs it removes is the first thing
 the regenerated fan-out sweep should answer.
 
 **Fan-out scalability beyond N=2 is bounded by this measurement box** (2
-physical cores) rather than by the design — see `STATUS.md` Open problem #3.
+physical cores) rather than by the design — see `docs/dev/STATUS.md` Open problem #3.
 
 ### p99.9 is quotable with deep C-states disabled; p99.99 is not yet
 
@@ -721,7 +721,7 @@ over the two transports; only the transport differs.
   ran for the same ten minutes with the same result — 18,000/18,000 frames,
   exactly 30.000 fps, 0 drops — and, as expected, far smaller RSS
   (~5 MiB total across all 4 processes: no 150 MiB shared ring to page in).
-  Full numbers in STATUS.md.
+  Full numbers in docs/dev/STATUS.md.
 - **30.9 GB of memory traffic avoided over ten minutes at a gentle 30 fps.**
   Same "memory passes" accounting as the benchmark methodology above
   (zcring: 1 producer write + N consumer reads; sockets: 1 staging write +
@@ -749,7 +749,7 @@ Run it: `make demo` (60 s default) or `DURATION=600 make demo` /
 `DURATION=600 TRANSPORT=unix make demo` for the ten-minute comparator run.
 CPU pinning: producer + 3 consumers is 4 roles on this 2-physical-core
 machine's 4 logical CPUs, so one consumer (checksum) necessarily shares a
-physical core with the producer — see `scripts/demo.sh` and `STATUS.md`
+physical core with the producer — see `scripts/demo.sh` and `docs/dev/STATUS.md`
 Open problem #3, the same hardware ceiling as N=4 fan-out.
 
 ## Known gaps
