@@ -1,0 +1,114 @@
+perf profile: zero-copy proof obligation (PLAN.md line 117)
+generated: 2026-08-21T12:49:57Z
+commit: bc276daf672d4734b8e06c70933fbec62d837868
+cpu: 11th Gen Intel(R) Core(TM) i3-1115G4 @ 3.00GHz
+kernel: 7.0.0-28-generic
+size=65536 count=20000 warmup=2000 cpu-prod=2 cpu-cons=3 freq=3000Hz
+
+NOTE on --touch: --touch makes the benchmark harness itself write
+and read every byte of the payload, on both the producer and
+consumer side, by design (it's what makes the throughput/latency
+numbers comparable across transports that otherwise wouldn't touch
+the data at all). That means both profiles below will legitimately
+show time in the harness's own fill/verify loop for every
+transport, including zcring. That is expected and is NOT the
+thing being tested. The question this profile answers is narrower:
+does the TRANSPORT (zc_reserve/zc_commit/zc_acquire/zc_release for
+zcring; write(2)/read(2) for unix) additionally copy the payload on
+top of the harness's own touch -- i.e. does a copy symbol
+(copy_user_generic, __memmove_*, memcpy, etc) appear attributable
+to the transport path, not to the harness's touch loop.
+
+Two things to know before reading the tables below as "missing ==
+innocent":
+  1. zc_reserve/zc_commit/zc_acquire/zc_release are 'static inline'
+     in src/zcring.h, so at -O2 they are inlined into main() rather
+     than appearing as their own symbols. Their cost (what there is
+     of it) is folded into the 'main' row, not absent from the
+     profile. Confirmed by grep: 'static inline' on all four.
+  2. clock_gettime()/[vdso] entries are the harness's own latency
+     timestamping (one call per message on each side), not the
+     transport. They show up in both profiles at similar weight and
+     are not part of what this proof is checking.
+
+======================================================================
+TRANSPORT: unix (control -- known one-copy transport, sanity check
+that this method actually detects a copy when one exists)
+======================================================================
+bench csv: unix,65536,21367,13420,71399,1886154,3128009,3628114
+
+# Samples: 6K of event 'cpu/cycles/P'
+# Event count (approx.): 5147399828
+
+top 20 symbols by overhead:
+    44.36%          1690  [vdso]                [.] 0x0000000000000997                       -      -            
+     7.82%          1485  [kernel.kallsyms]     [k] _copy_to_iter                            -      -            
+     5.35%           346  bench                 [.] main                                     -      -            
+     2.97%           113  [kernel.kallsyms]     [k] kernel_init_pages                        -      -            
+     2.81%           107  [kernel.kallsyms]     [k] _copy_from_iter                          -      -            
+     2.75%           105  [vdso]                [.] 0x00000000000009ca                       -      -            
+     1.53%            59  [vdso]                [.] __vdso_clock_gettime                     -      -            
+     1.48%            57  libc.so.6             [.] clock_gettime@@GLIBC_2.17                -      -            
+     1.45%            55  [vdso]                [.] 0x0000000000000a0f                       -      -            
+     1.45%            55  [vdso]                [.] 0x0000000000000967                       -      -            
+     1.39%            53  [vdso]                [.] 0x000000000000098e                       -      -            
+     1.38%            53  [vdso]                [.] 0x000000000000094e                       -      -            
+     1.36%            52  [vdso]                [.] 0x0000000000000a16                       -      -            
+     1.34%            51  [vdso]                [.] 0x00000000000009a0                       -      -            
+     1.29%            49  [vdso]                [.] 0x00000000000009a3                       -      -            
+     1.21%            46  [vdso]                [.] 0x00000000000009d1                       -      -            
+     1.21%            46  [vdso]                [.] 0x00000000000009ae                       -      -            
+     1.19%            45  [vdso]                [.] 0x000000000000099c                       -      -            
+     1.19%            45  [vdso]                [.] 0x00000000000009bd                       -      -            
+     1.14%            43  [vdso]                [.] 0x0000000000000972                       -      -            
+
+full-report sweep for copy-shaped symbols (not just the top 20 --
+this is the actual check, the top-N table above is for human eyeballing):
+     7.82%          1485  [kernel.kallsyms]     [k] _copy_to_iter                            -      -            
+     2.81%           107  [kernel.kallsyms]     [k] _copy_from_iter                          -      -            
+     0.05%             2  [kernel.kallsyms]     [k] copy_page_from_iter                      -      -            
+     0.03%             5  [kernel.kallsyms]     [k] simple_copy_to_iter                      -      -            
+^^ COPY SYMBOL FOUND -- see above
+
+======================================================================
+TRANSPORT: zcring
+======================================================================
+bench csv: zcring,65536,10359,9249,21121,255956,536594,554665
+
+# Samples: 6K of event 'cpu/cycles/P'
+# Event count (approx.): 8979032677
+
+top 20 symbols by overhead:
+    58.38%          3870  bench                 [.] main                                   -      -            
+    25.75%          1705  [vdso]                [.] 0x0000000000000997                     -      -            
+     1.44%            95  [vdso]                [.] 0x00000000000009ca                     -      -            
+     0.95%            63  libc.so.6             [.] clock_gettime@@GLIBC_2.17              -      -            
+     0.89%            59  [vdso]                [.] 0x00000000000009ae                     -      -            
+     0.89%            59  [vdso]                [.] 0x000000000000098e                     -      -            
+     0.80%            53  [vdso]                [.] __vdso_clock_gettime                   -      -            
+     0.79%            52  [vdso]                [.] 0x00000000000009a3                     -      -            
+     0.79%            52  [vdso]                [.] 0x00000000000009e5                     -      -            
+     0.77%            51  [vdso]                [.] 0x0000000000000a0f                     -      -            
+     0.77%            51  [vdso]                [.] 0x0000000000000953                     -      -            
+     0.76%            50  [vdso]                [.] 0x00000000000009bd                     -      -            
+     0.71%            47  [vdso]                [.] 0x0000000000000a16                     -      -            
+     0.71%            47  [vdso]                [.] 0x000000000000094e                     -      -            
+     0.69%            46  [vdso]                [.] 0x0000000000000972                     -      -            
+     0.65%            43  [vdso]                [.] 0x00000000000009d1                     -      -            
+     0.64%            42  [vdso]                [.] 0x00000000000009a0                     -      -            
+     0.60%            40  [vdso]                [.] 0x0000000000000a1f                     -      -            
+     0.57%            38  [vdso]                [.] 0x0000000000000967                     -      -            
+     0.57%            38  [vdso]                [.] 0x000000000000099c                     -      -            
+
+full-report sweep for copy-shaped symbols (not just the top 20 --
+this is the actual check, the top-N table above is for human eyeballing):
+none found in 88 total symbol rows
+
+======================================================================
+VERDICT (computed from the full-report sweeps above, not asserted)
+======================================================================
+unix control  -- copy symbol present: yes
+zcring        -- copy symbol present: no
+Consistent with the zero-copy claim: the method demonstrably
+detects a real copy (unix) and does not find one on zcring's
+transport path at this payload size.
