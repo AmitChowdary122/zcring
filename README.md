@@ -1,6 +1,6 @@
 # zcring — zero-copy shared-memory IPC framework
 
-Layers 1–2 of the plan in [PLAN.md](PLAN.md): a lock-free MPMC ring over a
+Layers 1–2 of the plan in [PLAN.md](dev/PLAN.md): a lock-free MPMC ring over a
 memfd-backed shared mapping, with `reserve`/`commit` and `acquire`/`release`
 handing back raw pointers into shared memory for in-place construction and
 reading, plus a broadcast fan-out mode where N consumers each see every
