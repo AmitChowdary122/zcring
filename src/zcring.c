@@ -318,6 +318,13 @@ static int zc_create_mode(zc_ring_t *r, uint32_t slot_count, uint32_t slot_size,
     atomic_store_explicit(&c->waiters, 0, memory_order_relaxed);
     atomic_store_explicit(&c->wake_ts, 0, memory_order_relaxed);
     atomic_store_explicit(&c->gate_cache, 0, memory_order_relaxed);
+    /* No producer registered. Deliberately NOT set to getpid(): the creator is
+     * not necessarily the producer, and a live non-producing creator would
+     * vouch for a dead producer forever, silently disabling recovery in exactly
+     * the deployment that needs it. The producer says so itself, with
+     * zc_producer_register(). See §13. */
+    atomic_store_explicit(&c->prod_pid, 0, memory_order_relaxed);
+    atomic_store_explicit(&c->abandon_hi, 0, memory_order_relaxed);
 
     /* memset already zeroed the registry, which is ZC_CONS_FREE. Written
      * explicitly because the gate's correctness depends on it. */
@@ -334,7 +341,8 @@ static int zc_create_mode(zc_ring_t *r, uint32_t slot_count, uint32_t slot_size,
     zc_slot_t *slots = (zc_slot_t *)((uint8_t *)base + slots_off);
     for (uint32_t i = 0; i < slot_count; i++) {
         atomic_store_explicit(&slots[i].seq, (uint64_t)i, memory_order_relaxed);
-        slots[i].len = 0;
+        slots[i].len   = 0;
+        slots[i].flags = 0;
     }
     atomic_thread_fence(memory_order_release);
 
@@ -485,6 +493,115 @@ int zc_bcast_reap(zc_ring_t *r)
             reaped++;
     }
     return reaped;
+}
+
+/* ---- producer-side crash recovery (§13) ----
+ *
+ * The liveness test is deliberately the same one zc_bcast_reap() applies to
+ * consumers: ESRCH, and only ESRCH, means gone. EPERM means the process exists
+ * under another uid — alive, and still entitled to finish its message. A
+ * producer descheduled for a second answers here exactly as a healthy one
+ * does. Factored out so the two paths cannot drift apart. */
+static int zc_pid_dead(uint32_t pid)
+{
+    if (pid == 0) return 0;
+    return kill((pid_t)pid, 0) != 0 && errno == ESRCH;
+}
+
+int zc_producer_register(zc_ring_t *r)
+{
+    if (!r || !r->ctrl) { errno = EINVAL; return -1; }
+    zc_ctrl_t *c = r->ctrl;
+    uint32_t me = (uint32_t)getpid();
+
+    for (;;) {
+        uint32_t cur = atomic_load_explicit(&c->prod_pid, memory_order_acquire);
+        if (cur == me) return 0;                       /* idempotent */
+        /* A live holder keeps it: taking over from a producer that is merely
+         * slow is precisely what §13 must not allow. Only an unregistered or
+         * genuinely dead holder can be displaced. */
+        if (cur != 0 && !zc_pid_dead(cur)) { errno = EEXIST; return -1; }
+        if (atomic_compare_exchange_weak_explicit(
+                &c->prod_pid, &cur, me,
+                memory_order_acq_rel, memory_order_relaxed))
+            return 0;
+    }
+}
+
+int zc_producer_alive(zc_ring_t *r)
+{
+    if (!r || !r->ctrl) { errno = EINVAL; return -1; }
+    uint32_t pid = atomic_load_explicit(&r->ctrl->prod_pid,
+                                        memory_order_acquire);
+    if (pid == 0) { errno = ESRCH; return -1; }
+    return zc_pid_dead(pid) ? 0 : 1;
+}
+
+int zc_producer_reap(zc_ring_t *r)
+{
+    if (!r || !r->ctrl) { errno = EINVAL; return -1; }
+    zc_ctrl_t *c = r->ctrl;
+
+    uint32_t pid = atomic_load_explicit(&c->prod_pid, memory_order_acquire);
+    if (pid == 0) { errno = ESRCH; return -1; }
+    if (!zc_pid_dead(pid)) return 0;   /* alive: slow, not dead. Leave it. */
+
+    /* Exactly one caller publishes. Every consumer that noticed the stall will
+     * arrive here at about the same moment, and independent walks would race
+     * on the plain len/flags stores below. Winning this CAS is the right to
+     * recover; clearing prod_pid is also what frees the identity for a
+     * replacement producer, so recovery and takeover are one operation. */
+    uint32_t expect = pid;
+    if (!atomic_compare_exchange_strong_explicit(
+            &c->prod_pid, &expect, 0,
+            memory_order_acq_rel, memory_order_relaxed))
+        return 0;
+
+    const uint64_t span  = (uint64_t)r->mask + 1;
+    const int      bcast = (c->mode & ZC_MODE_MASK) == ZC_MODE_BROADCAST;
+
+    /* Scan only the positions that can still be in flight: from the consumer
+     * frontier up to head. Bounded by span either way, but starting at the
+     * frontier keeps it honest when head is still below span (first lap). */
+    uint64_t head = atomic_load_explicit(&c->head, memory_order_acquire);
+    uint64_t from = bcast ? zc_bcast_gate(r)
+                          : atomic_load_explicit(&c->tail, memory_order_acquire);
+    if (head - from > span) from = head - span;   /* defensive; both modes gate */
+
+    /* Raise abandon_hi BEFORE publishing anything, so no consumer can observe
+     * an abandoned slot's seq without also being able to see the bound that
+     * makes its flags bit meaningful. The release CAS on each slot below is the
+     * edge the consumer's acquire pairs with, and this store is sequenced
+     * before all of them. Monotonic: never lower a bound a previous recovery
+     * already established. */
+    uint64_t hi = atomic_load_explicit(&c->abandon_hi, memory_order_relaxed);
+    if ((int64_t)(head - hi) > 0)
+        atomic_store_explicit(&c->abandon_hi, head, memory_order_release);
+
+    int n = 0;
+    for (uint64_t pos = from; (int64_t)(pos - head) < 0; pos++) {
+        zc_slot_t *s = &r->slots[pos & r->mask];
+        uint64_t seq = atomic_load_explicit(&s->seq, memory_order_acquire);
+
+        /* commit stores exactly pos+1, in both modes and on every lap. So
+         * anything else, at a position the producer has already claimed, is a
+         * reservation it never published. The CAS goes from the value actually
+         * observed rather than one predicted per-mode: unicast's pre-commit seq
+         * is pos, broadcast's is pos-mask after the first lap and pos on it. */
+        if (seq == pos + 1) continue;
+
+        s->len   = 0;
+        s->flags = ZC_SLOT_ABANDONED;
+        if (atomic_compare_exchange_strong_explicit(
+                &s->seq, &seq, pos + 1,
+                memory_order_release, memory_order_relaxed))
+            n++;
+    }
+
+    /* Consumers blocked in FUTEX_WAIT have to be told, or the ring is
+     * mechanically recovered and still looks hung from userspace. */
+    if (n && r->notify) zc_wake(r);
+    return n;
 }
 
 /* Pass the ring's memfd to an unrelated process over a UNIX socket.

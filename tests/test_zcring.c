@@ -10,6 +10,7 @@
 
 #include <errno.h>
 #include <pthread.h>
+#include <signal.h>   /* kill/SIGKILL/pause: §13's recovery tests kill for real */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -376,6 +377,273 @@ static void test_bcast_reap_spares_slow(void)
     CHECK(zc_bcast_reserve(&r, &pos) == NULL, "producer un-gated by a live consumer");
 
     zc_bcast_leave(&r, id);
+    zc_close(&r);
+}
+
+/* ---- Layer 2: producer-side crash recovery (§13) ----
+ *
+ * The mirror of test_bcast_reap. A producer that dies between reserve and
+ * commit leaves a position permanently unpublished, and every consumer waiting
+ * on it waits forever. These tests kill a real producer with a real SIGKILL
+ * while it is genuinely holding a reservation — simulating the condition by
+ * hand-rolling a stuck seq would test the recovery arithmetic while proving
+ * nothing about whether the condition it recovers from is the one a crash
+ * actually produces.
+ */
+
+/* The reap call itself must be bounded: one kill(2) and at most slot_count
+ * CAS attempts, nothing that blocks or polls. Asserted generously enough not
+ * to flake under TSan's instrumentation while still ruling out anything
+ * timer-driven — the measured value is printed so the real number is visible
+ * in the log rather than hidden behind the ceiling. */
+#define REAP_BOUND_NS 50000000ULL   /* 50 ms */
+
+/* Shared handshake word so the parent kills the child at exactly the moment it
+ * is holding an uncommitted reservation, not before and not after. */
+static _Atomic uint32_t *shared_flag(void)
+{
+    _Atomic uint32_t *f = mmap(NULL, sizeof(*f), PROT_READ | PROT_WRITE,
+                               MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    atomic_store(f, 0);
+    return f;
+}
+
+static void test_producer_reap(void)
+{
+    printf("unicast recovers from a producer killed between reserve and commit\n");
+    zc_ring_t r;
+    CHECK(zc_create(&r, 8, SLOT_SIZE) == 0, "zc_create failed");
+
+    _Atomic uint32_t *held = shared_flag();
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        uint64_t pos; void *p;
+        if (zc_producer_register(&r) != 0) { atomic_store(held, 2); _exit(1); }
+
+        /* One good message, so recovery has to preserve what was committed
+         * rather than simply flushing the ring. */
+        p = zc_reserve(&r, &pos);
+        fill(p, 0);
+        zc_commit(&r, pos, SLOT_SIZE);
+
+        /* Now reserve and die holding it. Only half the payload is written, so
+         * the slot really does contain a torn message: if recovery let a
+         * consumer read it, verify() below would catch it. */
+        p = zc_reserve(&r, &pos);
+        memset(p, 0xAB, SLOT_SIZE / 2);
+
+        atomic_store(held, 1);
+        for (;;) pause();       /* holds the reservation until killed */
+    }
+    while (atomic_load(held) == 0) sched_yield();
+    CHECK(atomic_load(held) == 1, "child producer failed to register");
+
+    CHECK(zc_producer_alive(&r) == 1, "registered producer reported dead");
+
+    kill(pid, SIGKILL);
+    /* kill(pid,0) succeeds on a zombie, so the producer must be waited for
+     * before its slot is reclaimable — the same concession test_bcast_reap
+     * makes for consumers. Documented as a limit in §13. */
+    int st = 0;
+    waitpid(pid, &st, 0);
+    CHECK(WIFSIGNALED(st) && WTERMSIG(st) == SIGKILL,
+          "child was not actually killed by SIGKILL");
+    CHECK(zc_producer_alive(&r) == 0, "dead producer still reported alive");
+
+    uint64_t pos, id; uint32_t len; void *p;
+
+    p = zc_acquire(&r, &pos, &len);
+    CHECK(p != NULL, "message committed before the crash was lost");
+    if (p) {
+        CHECK(verify(p, &id) == 0 && id == 0, "committed message corrupted");
+        zc_release(&r, pos);
+    }
+
+    /* This is the leak: the slot the producer died holding. */
+    CHECK(zc_acquire(&r, &pos, &len) == NULL,
+          "uncommitted slot was readable before recovery");
+
+    uint64_t t0 = zc_now_ns();
+    int n = zc_producer_reap(&r);
+    uint64_t elapsed = zc_now_ns() - t0;
+    printf("  reap took %lu ns\n", (unsigned long)elapsed);
+
+    CHECK(n == 1, "reap abandoned %d slots, expected 1", n);
+    CHECK(elapsed < REAP_BOUND_NS, "reap took %lu ns, over the stated bound",
+          (unsigned long)elapsed);
+
+    p = zc_acquire(&r, &pos, &len);
+    CHECK(p != NULL, "ring did not recover: consumer still blocked");
+    if (p) {
+        CHECK(len == 0, "abandoned slot reported len %u, expected 0", len);
+        CHECK(zc_is_abandoned(&r, pos), "abandoned slot not flagged");
+        CHECK(verify(p, &id) != 0,
+              "torn payload verified clean -- the test is not testing anything");
+        zc_release(&r, pos);
+    }
+
+    /* Recovery cleared the producer identity, so a replacement can take over
+     * and the ring keeps working -- including through the lap that reuses the
+     * abandoned slot, which must NOT still read as abandoned (abandon_hi). */
+    CHECK(zc_producer_register(&r) == 0, "replacement producer could not register");
+    for (uint64_t i = 1; i <= 24; i++) {
+        p = zc_reserve(&r, &pos);
+        CHECK(p != NULL, "ring not reusable after recovery at msg %lu",
+              (unsigned long)i);
+        if (!p) break;
+        fill(p, i);
+        zc_commit(&r, pos, SLOT_SIZE);
+
+        p = zc_acquire(&r, &pos, &len);
+        CHECK(p != NULL, "message %lu not delivered after recovery",
+              (unsigned long)i);
+        if (!p) break;
+        CHECK(len == SLOT_SIZE && verify(p, &id) == 0 && id == i,
+              "message %lu corrupted after recovery", (unsigned long)i);
+        CHECK(!zc_is_abandoned(&r, pos),
+              "abandoned flag leaked into a later lap at msg %lu",
+              (unsigned long)i);
+        zc_release(&r, pos);
+    }
+
+    munmap(held, sizeof(*held));
+    zc_close(&r);
+}
+
+/* The distinction §13 shares with §3: a producer that is merely slow holds a
+ * reservation exactly as a dead one does, and must not be recovered from. This
+ * is the test that would fail if the liveness check were dropped in favour of
+ * a timeout. */
+static void test_producer_reap_spares_slow(void)
+{
+    printf("producer reap abandons the dead, not the merely slow\n");
+    zc_ring_t r;
+    CHECK(zc_create(&r, 8, SLOT_SIZE) == 0, "zc_create failed");
+
+    CHECK(zc_producer_register(&r) == 0, "register failed");
+
+    /* This process is the producer, is alive, and is sitting on a reservation
+     * it has not committed -- indistinguishable from a crash by any test other
+     * than liveness. */
+    uint64_t pos; void *p = zc_reserve(&r, &pos);
+    CHECK(p != NULL, "reserve failed");
+    fill(p, 7);
+
+    CHECK(zc_producer_reap(&r) == 0, "reap abandoned a live producer's slot");
+
+    uint64_t apos; uint32_t len;
+    CHECK(zc_acquire(&r, &apos, &len) == NULL,
+          "slot published behind a producer that is still alive");
+
+    /* The slow producer finally gets there. Its message must be intact and
+     * must not be flagged. */
+    zc_commit(&r, pos, SLOT_SIZE);
+    uint64_t id;
+    p = zc_acquire(&r, &apos, &len);
+    CHECK(p != NULL, "slow producer's message never arrived");
+    if (p) {
+        CHECK(len == SLOT_SIZE && verify(p, &id) == 0 && id == 7,
+              "slow producer's message corrupted");
+        CHECK(!zc_is_abandoned(&r, apos), "live producer's message flagged abandoned");
+        zc_release(&r, apos);
+    }
+
+    /* A ring nobody registered on cannot be recovered, and says so rather than
+     * guessing at an owner. */
+    zc_ring_t r2;
+    CHECK(zc_create(&r2, 8, SLOT_SIZE) == 0, "zc_create failed");
+    errno = 0;
+    CHECK(zc_producer_reap(&r2) == -1 && errno == ESRCH,
+          "reap on an unregistered ring did not report ESRCH");
+    zc_close(&r2);
+
+    zc_close(&r);
+}
+
+/* Broadcast is where a dead producer is worst: every consumer is stuck behind
+ * the same hole, so recovery has to un-stick all of them with one publish. */
+static void test_producer_reap_bcast(void)
+{
+    printf("broadcast recovers from a producer killed between reserve and commit\n");
+    zc_ring_t r;
+    CHECK(zc_create_bcast(&r, 8, SLOT_SIZE) == 0, "zc_create_bcast failed");
+
+    int id = zc_bcast_join(&r);
+    CHECK(id >= 0, "join failed");
+
+    _Atomic uint32_t *held = shared_flag();
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        uint64_t pos; void *p;
+        if (zc_producer_register(&r) != 0) { atomic_store(held, 2); _exit(1); }
+        p = zc_bcast_reserve(&r, &pos);
+        fill(p, 0);
+        zc_bcast_commit(&r, pos, SLOT_SIZE);
+
+        p = zc_bcast_reserve(&r, &pos);
+        memset(p, 0xAB, SLOT_SIZE / 2);
+        atomic_store(held, 1);
+        for (;;) pause();
+    }
+    while (atomic_load(held) == 0) sched_yield();
+    CHECK(atomic_load(held) == 1, "child producer failed to register");
+
+    kill(pid, SIGKILL);
+    int st = 0;
+    waitpid(pid, &st, 0);
+    CHECK(WIFSIGNALED(st), "child was not actually killed");
+
+    uint64_t pos, got; uint32_t len; void *p;
+
+    p = zc_bcast_acquire(&r, id, &pos, &len);
+    CHECK(p != NULL, "message committed before the crash was lost");
+    if (p) {
+        CHECK(verify(p, &got) == 0 && got == 0, "committed message corrupted");
+        zc_bcast_release(&r, id, pos);
+    }
+    CHECK(zc_bcast_acquire(&r, id, &pos, &len) == NULL,
+          "uncommitted slot was readable before recovery");
+
+    uint64_t t0 = zc_now_ns();
+    int n = zc_producer_reap(&r);
+    uint64_t elapsed = zc_now_ns() - t0;
+    printf("  reap took %lu ns\n", (unsigned long)elapsed);
+
+    CHECK(n == 1, "reap abandoned %d slots, expected 1", n);
+    CHECK(elapsed < REAP_BOUND_NS, "reap took %lu ns, over the stated bound",
+          (unsigned long)elapsed);
+
+    p = zc_bcast_acquire(&r, id, &pos, &len);
+    CHECK(p != NULL, "consumer still blocked after recovery");
+    if (p) {
+        CHECK(len == 0, "abandoned slot reported len %u, expected 0", len);
+        CHECK(zc_is_abandoned(&r, pos), "abandoned slot not flagged");
+        zc_bcast_release(&r, id, pos);
+    }
+
+    /* And the ring keeps delivering under a replacement producer. */
+    CHECK(zc_producer_register(&r) == 0, "replacement producer could not register");
+    for (uint64_t i = 1; i <= 24; i++) {
+        p = zc_bcast_reserve(&r, &pos);
+        CHECK(p != NULL, "reserve failed after recovery at msg %lu", (unsigned long)i);
+        if (!p) break;
+        fill(p, i);
+        zc_bcast_commit(&r, pos, SLOT_SIZE);
+
+        p = zc_bcast_acquire(&r, id, &pos, &len);
+        CHECK(p != NULL, "message %lu not delivered after recovery", (unsigned long)i);
+        if (!p) break;
+        CHECK(len == SLOT_SIZE && verify(p, &got) == 0 && got == i,
+              "message %lu corrupted after recovery", (unsigned long)i);
+        CHECK(!zc_is_abandoned(&r, pos),
+              "abandoned flag leaked into a later lap at msg %lu", (unsigned long)i);
+        zc_bcast_release(&r, id, pos);
+    }
+
+    zc_bcast_leave(&r, id);
+    munmap(held, sizeof(*held));
     zc_close(&r);
 }
 
@@ -904,6 +1172,9 @@ int main(void)
     test_bcast_backpressure();
     test_bcast_reap();
     test_bcast_reap_spares_slow();
+    test_producer_reap();
+    test_producer_reap_spares_slow();
+    test_producer_reap_bcast();
     test_bcast_cross_process();
     test_notify_unicast();
     test_notify_bcast();

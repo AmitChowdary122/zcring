@@ -158,9 +158,20 @@ quiesced re-run before it is worth anything.
   requoted against the 20 Aug canonical data), **repo public ✅**.
   **Demo video ❌ — the last remaining gate.** Deadline verified from the
   portal: **~25 Aug 00:00 IST**, midnight ending 24 Aug.
-- **Not started**: `eventfd`/`epoll` bridge, crash recovery for producers,
-  determinism rigor (isolcpus / nohz_full / PREEMPT_RT), iceoryx and ZeroMQ
-  comparators.
+- **Producer crash recovery done** (21 Aug) — PLAN.md §3.4's "most obvious
+  hostile question" is answered. A producer that dies between `zc_reserve()`
+  and `zc_commit()` no longer leaks the slot: `zc_producer_reap()` applies the
+  same `kill(pid, 0)` death-vs-slowness test §3 applies to consumers and
+  publishes what the dead producer held as zero-length `ZC_SLOT_ABANDONED`
+  messages. **ABI still v2** — `prod_pid`/`abandon_hi` fit the padding after
+  `map_size`, `flags` is `zc_slot_t`'s renamed tail padding, and `bench`'s
+  `main()` (which inlines the whole fast path) disassembles byte-identically
+  to before, so `results/sweep.csv` and `results/fanout.csv` stand. Tests kill
+  a real producer with a real `SIGKILL` mid-reserve; recovery measured at
+  324 ns unicast / 452 ns broadcast. TSan clean. Derivation in
+  `src/zcring.h` §13.
+- **Not started**: `eventfd`/`epoll` bridge, determinism rigor
+  (isolcpus / nohz_full / PREEMPT_RT), iceoryx and ZeroMQ comparators.
 - **Portability audit done** (17 Aug) — the shared-memory ABI now asserts
   atomic lock-freedom and an architecture-aware cache-line size, and
   cross-compiles clean for aarch64/riscv64. See below.

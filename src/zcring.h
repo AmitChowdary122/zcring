@@ -760,6 +760,167 @@
  * explicitly (a stripped-down embedded riscv64 core, for instance), which is
  * exactly the silent-corruption case §12a exists to turn into a compile
  * error instead. See STATUS.md "Portability audit" for the same summary.
+ *
+ * ===========================================================================
+ * 13. Producer death between reserve and commit
+ * ===========================================================================
+ *
+ * §3 answers what happens when a consumer dies holding a cursor. The mirror
+ * case is the one PLAN.md §3.4 calls the most obvious hostile question, and
+ * until this section existed the framework had no answer to it: a producer
+ * that dies between zc_reserve() and zc_commit() leaves that position
+ * permanently unpublished. Its seq never reaches pos+1, so every consumer
+ * waiting on it waits forever, and in broadcast every consumer is behind it.
+ * One dead producer bricks the ring.
+ *
+ * The asymmetry with §3 is why this needs its own section rather than another
+ * loop inside zc_bcast_reap(). Evicting a dead consumer only *removes* a
+ * constraint — the gate stops honouring a cursor, and the cost of being wrong
+ * is a slot recycled early. Recovering from a dead producer means writing to a
+ * slot the producer owns: publishing on its behalf. Being wrong there does not
+ * stall the ring, it corrupts it — two writers on one slot's seq, and a
+ * consumer reading a half-constructed message as though it were complete. The
+ * death test therefore has to be at least as strict as §3's, and the write has
+ * to be serialised against every other would-be recoverer.
+ *
+ * ---------------------------------------------------------------------------
+ * Detection needs no new per-slot state
+ * ---------------------------------------------------------------------------
+ *
+ * Which is the reason this fits inside the existing layout at all. "Position p
+ * was reserved and never published" is already fully expressed by words the
+ * ring keeps anyway:
+ *
+ *     (int64_t)(p - head) < 0        the producer claimed p; reserve moved head past it
+ *     slots[p & mask].seq != p + 1   it never published; commit stores exactly p+1
+ *
+ * Both modes and both laps collapse into that one test, because commit stores
+ * p+1 unconditionally. The recovery path never has to predict the pre-commit
+ * value per mode — unicast's is p, broadcast's is p-mask after the first lap
+ * and p on it — because it CASes from the value it actually observed. Slots
+ * that are free, acquired, or legitimately published either read p+1 or fall
+ * outside [frontier, head) and are skipped.
+ *
+ * ---------------------------------------------------------------------------
+ * Death versus slowness — §3's test, deliberately not a second one
+ * ---------------------------------------------------------------------------
+ *
+ * The producer registers its pid (zc_producer_register) in ctrl->prod_pid, and
+ * zc_producer_reap() applies the same liveness test zc_bcast_reap() applies to
+ * consumers, factored into one zc_pid_dead() so the two cannot drift apart:
+ * kill(pid, 0), where ESRCH and only ESRCH means gone. EPERM means the process
+ * exists under another uid — alive, and still entitled to finish its message.
+ * A producer descheduled for a second answers exactly as a healthy one does.
+ * This abandons the dead and never the late, which is the sentence §3 ends on
+ * and deliberately the same rule.
+ *
+ * That rule is the whole of the defence, and it is sufficient because it is
+ * one-directional. A process that answers ESRCH has been torn down by the
+ * kernel and has no further stores to issue, so "the producer wakes up and
+ * commits after we abandoned its slot" is not a reachable state. The only
+ * dangerous direction would be judging a live producer dead, and kill() cannot
+ * report ESRCH for a process that still exists.
+ *
+ * Concurrent recoverers are serialised one level up rather than per slot.
+ * Every consumer that notices the stall calls zc_producer_reap() at about the
+ * same moment, and independent walks would race on the plain len/flags stores
+ * that must precede each release CAS. So the first thing reap does after the
+ * death test is CAS prod_pid from the dead pid to 0: exactly one caller wins
+ * and does all the publishing, the losers return 0 immediately. Clearing
+ * prod_pid is also what frees the identity for a replacement producer, so
+ * recovery and takeover are the same operation.
+ *
+ * ---------------------------------------------------------------------------
+ * What an abandoned message looks like to a consumer
+ * ---------------------------------------------------------------------------
+ *
+ * The slot is published, not skipped. Skipping would mean advancing a consumer
+ * past a position it never read, and in unicast there is no per-consumer
+ * cursor to advance — tail is shared and CASed. Publishing is the only move
+ * that works identically in both modes and needs no consumer to cooperate:
+ * reap stores len = 0 and flags = ZC_SLOT_ABANDONED, then release-CASes seq to
+ * pos+1, and every waiting consumer's next acquire returns normally.
+ *
+ * A zero-length message is not self-describing — an application may
+ * legitimately send one — so the distinction rides in zc_slot_t's existing
+ * 4-byte tail padding, renamed from _pad to flags. zc_is_abandoned() reads it,
+ * qualified by ctrl->abandon_hi so that the bit surviving into the slot's next
+ * lap cannot be misread; the exactness argument for that split is at
+ * abandon_hi's definition. A consumer that never calls it sees an empty
+ * message rather than a hang, which is the right default: the ring recovers
+ * whether or not the application was written to expect this.
+ *
+ * ---------------------------------------------------------------------------
+ * The recovery bound
+ * ---------------------------------------------------------------------------
+ *
+ * In two parts, because only one of them is zcring's to bound.
+ *
+ * Detection is the application's. zcring runs no timer and no watchdog thread;
+ * it exposes zc_producer_alive() and, in broadcast, the existing
+ * zc_bcast_lag(), and the caller picks the threshold past which a stall is
+ * implausible. Same division §3 draws for zc_bcast_reap(), for the same
+ * reason: a plausible producer stall is 33 ms for a 30 Hz camera and 200 us
+ * for a control loop, and a constant compiled into this header would be wrong
+ * for both.
+ *
+ * Recovery once invoked is bounded and wait-free: one kill(2), one CAS on
+ * prod_pid, one store to abandon_hi, then at most slot_count slot inspections
+ * with at most one CAS each. No loop retries unboundedly, nothing blocks, and
+ * there is no syscall inside the scan. When the call returns, every slot the
+ * dead producer held has been published — no residual state, no second pass
+ * required. A caller that lost the prod_pid CAS returns immediately and sees
+ * the winner's publications within that same bounded window.
+ *
+ * So the end-to-end bound is: the caller's own detection threshold, plus one
+ * O(slot_count) reap call containing a single syscall. tests/test_zcring.c's
+ * test_producer_reap asserts the second half against a producer killed with a
+ * real SIGKILL while holding a reservation, not a simulated one.
+ *
+ * ---------------------------------------------------------------------------
+ * Limits, stated the way §3 states its own
+ * ---------------------------------------------------------------------------
+ *
+ *   - Process-granular, exactly as §3 is. A producer *thread* that dies inside
+ *     a live process is not detectable this way; the process is still there.
+ *     Threads within one process must not die holding a reservation.
+ *   - A zombie is still a process. Until the producer's parent wait()s for it,
+ *     kill(pid, 0) succeeds and nothing is reclaimed. test_producer_reap has to
+ *     waitpid() the child it kills before reaping, and does — the same
+ *     concession test_bcast_reap already makes for consumers.
+ *   - PID reuse can keep a dead producer's registration looking alive: same
+ *     window as §3, same exposure, a stalled ring rather than a corrupted one.
+ *     Note the direction — reuse can only ever make a dead pid look live, which
+ *     is the failure that costs recovery, never the one that costs safety.
+ *   - Recovery is unavailable on a ring whose producer never registered
+ *     (prod_pid == 0); reap returns -1/ESRCH rather than guessing. zc_create()
+ *     deliberately does not register the creator, because a creator that is not
+ *     itself the producer would be a live pid permanently vouching for a dead
+ *     one — silently disabling the feature in exactly the deployment that needs
+ *     it.
+ *   - Only one producer is tracked. The unicast ring is MPMC and several
+ *     producers may hold reservations at once; prod_pid names one of them, so
+ *     reap covers the single-producer case (which is what §3.4 asks about and
+ *     what the demo pipeline is) and, on a genuinely multi-producer ring,
+ *     abandons the *slots* correctly but only once the registered producer is
+ *     the one that died. Per-producer attribution would need an owner field per
+ *     slot written during reserve — a store on the fast path and a registry
+ *     that does not fit the padding. Stated as a limit rather than papered over.
+ *   - The payload of an abandoned slot is whatever the dead producer had
+ *     written so far. It is reported as len 0 and flagged, so a consumer
+ *     respecting either never reads it; the bytes are not scrubbed, because
+ *     zeroing a slot on the recovery path would be the one memcpy-shaped
+ *     operation in a framework whose entire claim is that it has none.
+ *
+ * The shared layout is untouched. prod_pid and abandon_hi land in the 16 bytes
+ * the first cache line already had spare after map_size, and flags is
+ * zc_slot_t's existing tail padding renamed — the same move §9 made for
+ * wake_ts. Every offsetof and sizeof assertion in §12b is unmodified and still
+ * true, slots_off and arena_off are unmoved, so results/sweep.csv and
+ * results/fanout.csv remain valid against this header and ZC_ABI_VERSION stays
+ * at 2. Nothing was added to zc_reserve(), zc_commit(), zc_acquire() or
+ * zc_release(): the recovery path is entirely off the fast path, exactly as
+ * zc_bcast_reap() is.
  */
 #ifndef ZCRING_H
 #define ZCRING_H
@@ -837,12 +998,25 @@ enum { ZC_MODE_UNICAST = 0, ZC_MODE_BROADCAST = 1 };
 #define ZC_MODE_F_HUGETLB   0x00000200u
 #define ZC_MODE_F_HUGEALIGN 0x00000400u
 
+/* Set in zc_slot_t.flags on a slot published by zc_producer_reap() on behalf
+ * of a producer that died holding it (§13). len is 0 on such a slot, but a
+ * zero-length message is something an application may legitimately send, so
+ * the distinction needs a bit of its own rather than an overloaded length. */
+#define ZC_SLOT_ABANDONED 0x00000001u
+
 /* Per-slot descriptor. seq is the Vyukov sequence counter that carries both
- * ownership and the acquire/release edge for the payload bytes. */
+ * ownership and the acquire/release edge for the payload bytes.
+ *
+ * flags was this struct's tail padding until §13 needed somewhere to record
+ * that a slot was published by the recovery path rather than by its producer.
+ * Reusing the padding is what keeps sizeof(zc_slot_t) at 16 and the slot array
+ * — and therefore arena_off — exactly where results/sweep.csv and
+ * results/fanout.csv were measured against. It is written only on the recovery
+ * path, never by zc_commit(), so the fast path is byte-for-byte unchanged. */
 typedef struct {
     _Atomic uint64_t seq;
     uint32_t         len;
-    uint32_t         _pad;
+    uint32_t         flags;
 } zc_slot_t;
 
 /* One consumer's registration. Each entry occupies a full cache line of its
@@ -881,6 +1055,39 @@ typedef struct {
     uint64_t slots_off;
     uint64_t arena_off;
     uint64_t map_size;
+
+    /* Producer identity, for recovery from a producer that died between
+     * reserve and commit (§13). Claimed by zc_producer_register(), tested with
+     * kill(pid, 0) exactly as zc_bcast_reap() tests a consumer's, and cleared
+     * by zc_producer_reap() — which both serialises the recoverers and frees
+     * the identity for a replacement producer.
+     *
+     * This lands in the 16 bytes the first cache line already had spare after
+     * map_size, the same way wake_ts landed in padding _Alignas had reserved
+     * (§9), so head stays at ZC_CACHELINE and every offset below it is
+     * unmoved. It is written once at registration and read only off the fast
+     * path, so sharing this cold line with the geometry fields costs nothing. */
+    _Atomic uint32_t prod_pid;
+
+    /* head as it stood at the last recovery, which is what makes zc_slot_t's
+     * flags bit unambiguous without zc_commit() ever having to clear it.
+     *
+     * The problem it solves: a slot abandoned at position p keeps its
+     * ZC_SLOT_ABANDONED bit set, and commit does not touch flags, so a
+     * legitimate message published into that same slot a lap later at p+span
+     * would otherwise still read as abandoned. Clearing the bit in commit would
+     * fix it for the price of a store on the hottest path in the framework,
+     * which §9 went to some trouble to keep at exactly the instructions it had.
+     *
+     * Comparing against this instead costs the fast path nothing and is exact,
+     * not heuristic. Every position abandoned by a given reap satisfies
+     * p < abandon_hi, because abandon_hi is the head that reap scanned up to;
+     * and the next legitimate use of that slot is at p+span >= abandon_hi,
+     * because p >= abandon_hi - span for anything that reap could have seen in
+     * flight. The two ranges touch but never overlap, so `pos < abandon_hi` is
+     * a clean split rather than a probabilistic one. Monotonic: head only
+     * advances, and reap only ever raises this. */
+    _Atomic uint64_t abandon_hi;
 
     _Alignas(ZC_CACHELINE) _Atomic uint64_t head;  /* producer cursor */
     _Alignas(ZC_CACHELINE) _Atomic uint64_t tail;  /* consumer cursor, unicast only */
@@ -963,6 +1170,16 @@ _Static_assert(offsetof(zc_ctrl_t, slot_size) == 20, "zc_ctrl_t layout changed")
 _Static_assert(offsetof(zc_ctrl_t, slots_off) == 24, "zc_ctrl_t layout changed");
 _Static_assert(offsetof(zc_ctrl_t, arena_off) == 32, "zc_ctrl_t layout changed");
 _Static_assert(offsetof(zc_ctrl_t, map_size) == 40, "zc_ctrl_t layout changed");
+/* §13. Same shape of assertion as wake_ts's below: not "the layout changed"
+ * but "the new field must still be living in padding that already existed".
+ * The leading fields are all fixed-width uintN_t (§12c), so 48 is 48 on every
+ * target regardless of ZC_CACHELINE, and head's _Alignas keeps it at
+ * ZC_CACHELINE either way. If someone later grows this struct's head, this
+ * fires before sizeof does. */
+_Static_assert(offsetof(zc_ctrl_t, prod_pid) == 48,
+    "prod_pid must fit the padding after map_size");
+_Static_assert(offsetof(zc_ctrl_t, abandon_hi) == 56,
+    "abandon_hi must fit the padding after map_size");
 
 _Static_assert(offsetof(zc_ctrl_t, head) == ZC_CACHELINE, "zc_ctrl_t layout changed");
 _Static_assert(offsetof(zc_ctrl_t, tail) == 2 * ZC_CACHELINE, "zc_ctrl_t layout changed");
@@ -1143,6 +1360,38 @@ void zc_bcast_leave(zc_ring_t *r, int id);
  * per message. See §3 for the two cases it deliberately cannot detect. */
 int  zc_bcast_reap(zc_ring_t *r);
 
+/* ---- producer-side crash recovery (§13) ---- */
+
+/* Claim producer identity for this process. Required before zc_producer_reap()
+ * can recover anything: zc_create() deliberately does not register the creator,
+ * because a creator that is not the producer would be a live pid permanently
+ * vouching for a dead one. Idempotent for the current holder. Succeeds if the
+ * ring has no producer or its registered producer is gone — so a replacement
+ * producer takes over by calling this. Returns 0, or -1/EEXIST if a *live*
+ * different process already holds it. */
+int  zc_producer_register(zc_ring_t *r);
+
+/* 1 if the registered producer is alive, 0 if it is gone, -1/ESRCH if no
+ * producer ever registered. One kill(2). This is the hook for an application
+ * choosing its own stall threshold — see the recovery bound in §13. */
+int  zc_producer_alive(zc_ring_t *r);
+
+/* Bounded-time recovery from a producer that died between reserve and commit.
+ * If the registered producer is gone, publishes every slot it reserved and
+ * never committed as a zero-length ZC_SLOT_ABANDONED message, so consumers
+ * waiting on those positions proceed. Returns how many slots were abandoned,
+ * or -1/ESRCH if no producer ever registered.
+ *
+ * 0 is not an error and covers three cases deliberately not distinguished,
+ * because the caller's response to all three is the same — keep consuming:
+ * the producer is alive (a merely slow producer is never abandoned — §13);
+ * another caller won the recovery and is publishing right now; or the producer
+ * was dead but held nothing uncommitted.
+ *
+ * One kill(2) plus at most slot_count CAS attempts, nothing blocking. See §13
+ * for the recovery bound and the cases it deliberately cannot detect. */
+int  zc_producer_reap(zc_ring_t *r);
+
 /* ---- fast path: must inline, so it lives in the header ---- */
 
 static inline uint64_t zc_now_ns(void)
@@ -1217,6 +1466,27 @@ static inline void *zc_acquire(zc_ring_t *r, uint64_t *pos_out, uint32_t *len_ou
     *pos_out = pos;
     *len_out = s->len;
     return r->arena + (size_t)(pos & r->mask) * r->slot_size;
+}
+
+/* True if the message at pos was published by zc_producer_reap() on behalf of
+ * a dead producer rather than by the producer itself (§13) — i.e. its payload
+ * is a partially-constructed message that must not be read.
+ *
+ * The flags bit alone is not sufficient: commit does not clear it, so the same
+ * slot reused a lap later still carries it. abandon_hi is what disambiguates,
+ * and exactly — see its definition in zc_ctrl_t.
+ *
+ * The flags load is plain for the same reason zc_acquire() reads len plainly:
+ * the recovery path writes it before its release store of seq, and the caller
+ * got pos from an acquire that read that seq. A consumer that never calls this
+ * sees a zero-length message instead of a hang, which is the intended default.
+ */
+static inline int zc_is_abandoned(zc_ring_t *r, uint64_t pos)
+{
+    if (!(r->slots[pos & r->mask].flags & ZC_SLOT_ABANDONED)) return 0;
+    uint64_t hi = atomic_load_explicit(&r->ctrl->abandon_hi,
+                                       memory_order_acquire);
+    return (int64_t)(pos - hi) < 0;
 }
 
 /* Hand the slot back to the producer, one lap ahead. */
