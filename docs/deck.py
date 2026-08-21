@@ -94,10 +94,10 @@ y = bullets(ax, [
  "**Four passes over memory per message.** The producer writes it, the kernel copies it in, the kernel copies it out, the consumer reads it. Two of those four are pure overhead.",
  "**A system call on every send and every receive.** At small message sizes this, not the copying, is what dominates.",
  "**For real-time embedded work the variance matters more than the mean.** A control loop that is usually fast and occasionally late is a control loop that is late.",
-], y=70, step=9)
-ax.add_patch(FancyBboxPatch((6, 20), 88, 16, boxstyle="round,pad=0.6,rounding_size=0.8",
+], y=70, step=8)
+ax.add_patch(FancyBboxPatch((6, 12), 88, 15, boxstyle="round,pad=0.6,rounding_size=0.8",
                             facecolor="#fdf3e0", edgecolor=WARN, lw=1.3))
-ax.text(50, 28, "Sensor → controller → actuator pipelines need an answer on time, every time.\n"
+ax.text(50, 19.5, "Sensor → controller → actuator pipelines need an answer on time, every time.\n"
                 "Determinism is the requirement; throughput is a side effect.",
         fontsize=14.5, color="#7a5200", ha="center", va="center", linespacing=1.8)
 pdf.savefig(fig); plt.close(fig)
@@ -207,7 +207,7 @@ for i,(n,v,c) in enumerate([("N = 1","0.82x",WARN),("N = 2","1.37x",ZC),("N = 4"
 ax.text(60, 30, "zcring loses at one consumer and wins\nfrom two onward. The crossover is the\nresult — not a flat multiplier.",
         fontsize=13, color=INK, va="top", linespacing=1.7)
 note(ax, "N=4 on two physical cores is oversubscribed — four consumers wake simultaneously onto two cores.\n"
-         "Not quoted as a scalability result in either direction; it needs a machine with more cores to measure honestly.")
+         "Not quoted as growth: in broadcast mode every consumer runs on every message, so consumer count is bounded by core count on any platform.")
 pdf.savefig(fig); plt.close(fig)
 
 # -------------------------------------------------------- 7. determinism ----
@@ -297,15 +297,15 @@ pdf.savefig(fig); plt.close(fig)
 fig, ax = slide(pdf, "What it does not do, and what comes next",
                 "Stated by us rather than found by you")
 bullets(ax, [
- "**Single-consumer large payloads are slower than a UNIX socket.** 0.82x at 1 MiB, under the determinism-first configuration this project requires. Offered rate, thermal state and busy-spin were each eliminated as causes; the remaining candidates are platform power and frequency properties. Fan-out recovers the case from N=2.",
+ "**Single-consumer large payloads are slower than a UNIX socket.** 0.84x at 1 MiB on this part, under the determinism-first configuration. Offered rate, thermal state, busy-spin and TLB pressure were each tested and eliminated; the same sweep on AMD Zen inverts the result to 3.08x, so the cost tracks platform memory and frequency behaviour rather than the design. Fan-out recovers it from N=2 on either part.",
  "**Consumer count is bounded by core count, on any platform.** In broadcast mode every consumer runs on every message, so one producer plus four consumers oversubscribes a four-core embedded target exactly as it does this one. The crossover sits at N=2, which fits everywhere; we do not claim growth past it.",
  "**p99.99 is not yet quotable.** A smaller jitter source remains; isolcpus / nohz_full / PREEMPT_RT is the work that closes it.",
-], y=71, size=13, step=5.6, wrap=98, lead_gap=4.2)
-ax.add_patch(FancyBboxPatch((6, 12), 88, 20, boxstyle="round,pad=0.6,rounding_size=0.8",
+], y=72, size=12.5, step=5.0, wrap=104, lead_gap=3.9)
+ax.add_patch(FancyBboxPatch((6, 9), 88, 18, boxstyle="round,pad=0.6,rounding_size=0.8",
                             facecolor="#fdf3e0", edgecolor=WARN, lw=1.3))
-ax.text(50, 26, "Next: kernel-enforced arbitration", fontsize=16, fontweight="bold",
+ax.text(50, 22, "Next: kernel-enforced arbitration", fontsize=16, fontweight="bold",
         color="#7a5200", ha="center")
-ax.text(50, 18.5, "A pure-userspace framework cannot stop a buggy or malicious peer from corrupting the shared ring.\n"
+ax.text(50, 15, "A pure-userspace framework cannot stop a buggy or malicious peer from corrupting the shared ring.\n"
                   "A kernel mediation layer closes exactly that gap - the one thing this design cannot do from userspace.",
         fontsize=13, color="#7a5200", ha="center", va="center", linespacing=1.8)
 pdf.savefig(fig); plt.close(fig)
