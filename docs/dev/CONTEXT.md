@@ -1,3 +1,8 @@
+> **Internal working file.** Development context and standing decisions,
+> kept so that work carried across sessions stayed consistent. It describes
+> how the project was run, not what it does — see `README.md` for that, or
+> `EXPLAINER.md` for a plain-language version.
+
 # CONTEXT.md — project context
 
 **Read `docs/dev/HACKATHON.md` first — it holds the official rules, the real submission

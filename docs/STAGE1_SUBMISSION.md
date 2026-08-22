@@ -1,10 +1,9 @@
 # Stage 1 submission form — field text
 
-**Written fresh from `results/*.csv` and README.md's authoritative tables on
-17 Aug 2026. Do NOT copy from `ABSTRACT.md`** — that file predates several
-retractions and still contains `2.03× at N=4` (the true notify-mode figure is
-1.24×) and `19.6×` at 64 B, which came from the Layer 1 revision — the shipped
-code gives **16.8×**.
+Every field below is drafted from `results/*.csv` and README.md's authoritative
+tables. Note two portal constraints found on submission: **Description and
+Novelty are capped at 3000 characters**, and the validator **rejects angle
+brackets as HTML tags** (so write header names without them).
 
 Every number below traces to committed raw data. Provenance caveats are in
 `results/PROVENANCE.md`.

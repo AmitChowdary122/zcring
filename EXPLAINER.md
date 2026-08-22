@@ -166,23 +166,27 @@ care. The same limitation discovered by someone else reads as a cover-up.
 - Let waiting readers **sleep properly** instead of watching the table
   constantly, so they stop burning power while nothing is happening.
 
-## 9. Why we think this can win
+## 9. What this is good at, and what it isn't
 
-The judges score four things: is it new, does it work, does it grow, does it
-matter.
+**It works, and you can check that.** Everything described here runs today.
+Every number comes with the raw data behind it and a script that regenerates
+it. Six mistakes we made along the way are written down rather than buried,
+including one where our own cleverness turned out not to help.
 
-**Does it work** is our strongest suit. Everything runs today. Every number
-comes with the raw data behind it and a script to reproduce it. Six mistakes
-are documented rather than buried.
+**It gets better with more readers, and we measured that** rather than
+asserting it. That is the part where sharing memory genuinely beats copying,
+and it is why the camera demo has three consumers rather than one.
 
-**Does it grow** is our second: more readers means a bigger advantage, and we
-measured that rather than merely claiming it.
+**It is not novel in its core.** Ring buffers over shared memory are
+well-trodden ground; what is here is careful engineering and honest
+measurement, plus one finding about atomics that we had not seen written down
+elsewhere. The part that would be genuinely new — letting the operating system
+police who may write to the shared region — is designed but not built, and is
+labelled that way throughout.
 
-**Is it new** is what the operating-system guard would add, and it's next.
-
-**Does it matter** is what the camera demo is for — not "look, a faster
-number," but "look, this pipeline of programs now keeps up when it couldn't
-before."
+**Where it matters** is the camera demo: not "look, a faster number", but
+"this pipeline of programs keeps up when it previously could not, and nothing
+copied the frame three times to make that happen."
 
 ---
 
