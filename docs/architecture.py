@@ -7,10 +7,40 @@ output is deliberately flat: no gradients, no photos, few colours.
 
     python3 docs/architecture.py
 """
+import csv, collections, statistics
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch, FancyArrowPatch, Rectangle
+
+# ---------------------------------------------------------------------------
+# Measured figures are DERIVED from the committed CSVs, never retyped. An
+# earlier revision hardcoded them here, and they silently reverted to
+# superseded values (18-20x, 2.03x) during a branch merge while the rest of
+# the repository had moved on. A scored artifact must not be able to drift
+# away from the data it claims to show.
+# ---------------------------------------------------------------------------
+def _p50(path, key):
+    d = collections.defaultdict(list)
+    for r in csv.DictReader(open(path)):
+        d[tuple(r[k] for k in key)].append(int(r["p50_ns"]))
+    return {k: statistics.mean(v) for k, v in d.items()}
+
+_sw = _p50("results/sweep.csv", ["transport", "size"])
+_fo = _p50("results/fanout.csv", ["transport", "consumers", "size"])
+
+def _sweep_ratio(size):
+    z = _sw[("zcring", size)]
+    return min(_sw[("pipe", size)], _sw[("unix", size)]) / z
+
+def _fan_ratio(n):
+    z = _fo[("zcring", n, "1048576")]
+    return min(_fo[("pipe", n, "1048576")], _fo[("unix", n, "1048576")]) / z
+
+MEAS_64B  = f"{_sweep_ratio('64'):.1f}\u00d7 vs pipe"
+MEAS_1KIB = f"{_sweep_ratio('1024'):.1f}\u00d7"
+MEAS_FAN  = " / ".join(f"{_fan_ratio(n):.2f}\u00d7" for n in ("1", "2", "4"))
+
 
 INK      = "#14161a"
 MUTED    = "#5f6470"
@@ -163,10 +193,10 @@ ax.text(RX + 36, y - 1.6, "4", fontsize=11, fontweight="bold", color=MUTED,
 
 ax.text(RX + 1, 57.5, "MEASURED  ·  bare metal, dual-core + SMT",
         fontsize=11, fontweight="bold", color=INK, va="top")
-meas = [("64 B, one consumer", "18–20× vs pipe"),
-        ("1 KiB, one consumer", "~10×"),
+meas = [("64 B, one consumer", MEAS_64B),
+        ("1 KiB, one consumer", MEAS_1KIB),
         ("p99.9 @ 64 B", "1.04 µs, sub-2 µs spread"),
-        ("1 MiB   N=1 / N=2 / N=4", "0.82× / 1.38× / 2.03×")]
+        ("1 MiB   N=1 / N=2 / N=4", MEAS_FAN)]
 y = 53.6
 for k, v in meas:
     ax.text(RX + 1, y, k, fontsize=9.5, color=MUTED, va="center")

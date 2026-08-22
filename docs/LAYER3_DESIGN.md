@@ -1,9 +1,11 @@
-# Layer 3 — kernel-enforced arbitration
+# Layer 3 — kernel-enforced arbitration (DESIGN ONLY — NOT IMPLEMENTED)
 
-Design brief. Written 9 Aug 2026 on the Windows/docs machine; **built and
-tested on the bare-metal Ubuntu box.** Read this before writing any code.
-
-Status: **design only. No code exists yet.**
+> **Status: specified, not built. No kernel code exists.** This document is a
+> design brief, included because it states the architectural argument for why
+> a kernel component is warranted at all — which is the question a
+> userspace-only zero-copy framework has to answer. Nothing in it is claimed
+> as working software. Written 9 Aug 2026; if it is ever implemented, it
+> should be built and tested inside a VM (see §8).
 
 ---
 

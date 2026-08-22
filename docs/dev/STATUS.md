@@ -159,7 +159,7 @@ quiesced re-run before it is worth anything.
   before writing a line of kernel code.** Chosen as the next build item on
   14 Aug over the Stage 1 form text. See "Layer 3" below.
 - **Stage 1 artifacts**: architecture diagram ✅ (256 KB), deck ✅ (84 KB,
-  11 slides), form text ✅ (`docs/STAGE1_SUBMISSION.md` — every field drafted,
+  11 slides), form text ✅ (`docs/dev/STAGE1_SUBMISSION.md` — every field drafted,
   requoted against the 20 Aug canonical data), **repo public ✅**.
   **Demo video ❌ — the last remaining gate.** Deadline verified from the
   portal: **~25 Aug 00:00 IST**, midnight ending 24 Aug.
