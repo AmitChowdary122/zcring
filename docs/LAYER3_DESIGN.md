@@ -26,7 +26,7 @@ told is writable.
 **Only the kernel can hand out a mapping that is physically unable to write.**
 
 That is the gap Layer 3 closes, and it is why this scores on **Novelty &
-Innovation** *and* **Security** — the two criteria in `HACKATHON.md` where
+Innovation** *and* **Security** — the two criteria in `dev/HACKATHON.md` where
 this project is currently weakest.
 
 `zcring` today has exactly the iceoryx weakness. Say that plainly in the

@@ -1,10 +1,19 @@
 # zcring — zero-copy shared-memory IPC framework
 
-Layers 1–2 of the plan in [PLAN.md](dev/PLAN.md): a lock-free MPMC ring over a
-memfd-backed shared mapping, with `reserve`/`commit` and `acquire`/`release`
-handing back raw pointers into shared memory for in-place construction and
-reading, plus a broadcast fan-out mode where N consumers each see every
-message. No `memcpy` in the data path.
+A lock-free MPMC ring over a memfd-backed shared mapping, with
+`reserve`/`commit` and `acquire`/`release` handing back raw pointers into
+shared memory for in-place construction and reading, plus a broadcast fan-out
+mode where N consumers each see every message. No `memcpy` in the data path —
+**and that is demonstrated, not asserted**: `results/perf_proof.txt` profiles
+both transports and finds copy symbols in the UNIX-socket control while
+finding none in 88 symbol rows on zcring's path.
+
+Against the layered plan in [docs/dev/PLAN.md](docs/dev/PLAN.md): **Layer 1 complete** (ring,
+in-place construction, and the `perf` proof obligation it set). **Layer 2 is
+three of four** — adaptive notification, broadcast fan-out, and crash
+recovery for both dead consumers *and* dead producers are done; the
+`eventfd`/`epoll` bridge is not. Layer 3 is designed (`docs/LAYER3_DESIGN.md`)
+and deliberately unbuilt. Layer 4 is untouched.
 
 ```
 make            # build
@@ -422,7 +431,7 @@ actually lives in — sensor readings, actuator commands, state updates.
 **Near parity at 64 KiB (1.01×), then zcring *loses* at 256 KiB–1 MiB
 (0.68×–0.84×).** This is not offered-rate sensitivity, and it is not thermal
 throttling (both were investigated and ruled out as the primary cause — see
-`RUNNING.md` §4b and `reports.txt` §19 for the thermal investigation).
+`RUNNING.md` §4b and `docs/dev/reports.txt` §19 for the thermal investigation).
 Isolated with a controlled A/B at 1 MiB, N=1, cool machine, identical
 config, varying only the C-state setting:
 
@@ -452,7 +461,7 @@ sleeps on 99%+ of messages.
 rate the committed dataset actually uses, because the two do not say the same
 thing. p50, mean of 3 reps:
 
-**gap 100 µs** (replicating `reports.txt` §22) → `results/cstate_waiter_ab.csv`
+**gap 100 µs** (replicating `docs/dev/reports.txt` §22) → `results/cstate_waiter_ab.csv`
 
 | waiter | C-states on | C-states off | change |
 |---|---|---|---|
@@ -635,13 +644,13 @@ the baseline the fan-out advantage is measured against.
 At 64 B, N=4 shows zcring jumping to 1.03 µs from ~120 ns at N=1/N=2 — this
 is the known spinner-oversubscription artifact (2 physical cores, N=4 means
 more spinning waiters than hardware threads) documented in `RUNNING.md` and
-`STATUS.md`, not a fan-out regression. `--yield` was the stopgap that
+`docs/dev/STATUS.md`, not a fan-out regression. `--yield` was the stopgap that
 partially masked it; adaptive spin-then-futex notification is now the real
 fix, and quantifying how much of that 1.03 µs it removes is the first thing
 the regenerated fan-out sweep should answer.
 
 **Fan-out scalability beyond N=2 is bounded by this measurement box** (2
-physical cores) rather than by the design — see `STATUS.md` Open problem #3.
+physical cores) rather than by the design — see `docs/dev/STATUS.md` Open problem #3.
 
 ### p99.9 is quotable with deep C-states disabled; p99.99 is not yet
 
@@ -712,7 +721,7 @@ over the two transports; only the transport differs.
   ran for the same ten minutes with the same result — 18,000/18,000 frames,
   exactly 30.000 fps, 0 drops — and, as expected, far smaller RSS
   (~5 MiB total across all 4 processes: no 150 MiB shared ring to page in).
-  Full numbers in STATUS.md.
+  Full numbers in docs/dev/STATUS.md.
 - **30.9 GB of memory traffic avoided over ten minutes at a gentle 30 fps.**
   Same "memory passes" accounting as the benchmark methodology above
   (zcring: 1 producer write + N consumer reads; sockets: 1 staging write +
@@ -740,7 +749,7 @@ Run it: `make demo` (60 s default) or `DURATION=600 make demo` /
 `DURATION=600 TRANSPORT=unix make demo` for the ten-minute comparator run.
 CPU pinning: producer + 3 consumers is 4 roles on this 2-physical-core
 machine's 4 logical CPUs, so one consumer (checksum) necessarily shares a
-physical core with the producer — see `scripts/demo.sh` and `STATUS.md`
+physical core with the producer — see `scripts/demo.sh` and `docs/dev/STATUS.md`
 Open problem #3, the same hardware ceiling as N=4 fan-out.
 
 ## Known gaps
@@ -749,11 +758,12 @@ Open problem #3, the same hardware ceiling as N=4 fan-out.
 via `zc_bcast_reap()`, and adaptive spin-then-futex notification with an
 online-learned spin budget (above).
 
-- **The measurement machine no longer exists.** The i3-1115G4 failed on
-  14 Aug; every canonical dataset here came from it. Valid as measured, not
-  reproducible by us on demand. `scripts/lib.sh:check_machine()` refuses to
-  write a canonical dataset filename on a different CPU. Full statement in
-  `results/PROVENANCE.md`.
+- **The measurement machine failed and was recovered.** The i3-1115G4 died on
+  14 Aug (drive fault) and was revived on 20 Aug; the canonical datasets were
+  then re-measured on it against current code.
+  `scripts/lib.sh:check_machine()` refuses to write a canonical dataset
+  filename on a different CPU — note it *passes* on the i3, so `OUT_SUFFIX`
+  discipline is manual. Full statement in `results/PROVENANCE.md`.
 - **No Ryzen tail statistic is quotable.** `results/sweep_ryzen.csv` has a
   rock-solid p50 and a bimodal p99.99 across reps — external interference on
   an unquieted desktop, not transport behaviour. p50 only, until a quiesced
@@ -766,10 +776,17 @@ online-learned spin budget (above).
   is paced by an external clock and a producer that stalls on a full ring has
   a sizing problem that notification would hide rather than fix
   (`src/zcring.h` §10).
-- **Producer-side crash recovery is still absent.** A *producer* dying
-  mid-`reserve` leaks that slot — `zc_bcast_reap()` recovers dead consumers
-  only. Consumer death is the more common failure and the one that could
-  deadlock the ring, which is why it came first.
+- ~~Producer-side crash recovery~~ — **done 21 Aug** (`src/zcring.h` §13).
+  A producer killed between `reserve` and `commit` no longer leaks the slot,
+  in both unicast and broadcast mode. Verified by tests that actually
+  `SIGKILL` a producer mid-`reserve` rather than simulating it; measured
+  recovery 324 ns unicast, 452 ns broadcast. The death-versus-slowness
+  distinction is tested separately — reclaiming from a merely descheduled
+  producer would corrupt the ring, so *not* reclaiming is the harder half.
+  **The shared layout is byte-identical** (`sizeof(zc_ctrl_t)` still 1344,
+  `zc_slot_t` still 16, `head`/`tail` still at 64/128), so every committed
+  dataset remains valid — the new state was fitted into existing padding, as
+  `wake_ts` was in §9.
 - **Fan-out growth past N=2 is not claimed, and not because of the hardware.**
   In broadcast mode every consumer runs on every message, so consumer count is
   bounded by core count on *any* platform — one producer plus four consumers

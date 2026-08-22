@@ -1,10 +1,9 @@
 # Stage 1 submission form — field text
 
-**Written fresh from `results/*.csv` and README.md's authoritative tables on
-17 Aug 2026. Do NOT copy from `ABSTRACT.md`** — that file predates several
-retractions and still contains `2.03× at N=4` (the true notify-mode figure is
-1.24×) and `19.6×` at 64 B, which came from the Layer 1 revision — the shipped
-code gives **16.8×**.
+Every field below is drafted from `results/*.csv` and README.md's authoritative
+tables. Note two portal constraints found on submission: **Description and
+Novelty are capped at 3000 characters**, and the validator **rejects angle
+brackets as HTML tags** (so write header names without them).
 
 Every number below traces to committed raw data. Provenance caveats are in
 `results/PROVENANCE.md`.
@@ -120,9 +119,9 @@ with an online-learned wake policy."
 > three significant figures across all five repetitions.
 >
 > Stated precisely, because the distinction is the point: this is **strong
-> evidence, not proof**. The Intel machine no longer exists, so this was not a
-> controlled A/B, and the two parts differ in per-core memory bandwidth,
-> fabric clock and prefetch behaviour independently of anything tested. What
+> evidence, not proof**. It is not a controlled A/B: the two parts differ in
+> per-core memory bandwidth, fabric clock and prefetch behaviour independently
+> of anything tested. What
 > the result supports is that **the cost tracks platform memory and frequency
 > behaviour rather than the transport design** — four code-side explanations
 > were each tested and failed, and the one remaining class of explanation made
@@ -151,6 +150,21 @@ with an online-learned wake policy."
 > idle governor happened to choose C3 during that run. The effect has since
 > been confirmed cross-vendor on AMD (350 µs C3 exit), so it is a property of
 > the platform class rather than an Intel quirk.
+>
+> **The zero-copy claim is demonstrated, not asserted.** `perf` profiles of
+> both transports at 64 KiB are committed (`results/perf_proof.txt`): the
+> UNIX-socket control shows `_copy_to_iter` at 7.8% and `_copy_from_iter` at
+> 2.8%, while zcring's profile contains **no copy symbol in 88 symbol rows**.
+> The control is what makes it a proof rather than an absence — the method
+> demonstrably detects a real copy, then does not find one on our path.
+>
+> **Robustness.** A consumer that dies is evicted so it cannot gate the ring
+> forever; a producer killed *between* `reserve` and `commit` no longer leaks
+> its slot, in both unicast and broadcast mode. Both are verified by tests
+> that actually `SIGKILL` a peer rather than simulating the condition, with
+> measured recovery of 324 ns and 452 ns. Distinguishing a dead peer from a
+> merely descheduled one is the harder half and is tested separately, since
+> reclaiming from a live producer would corrupt the ring.
 >
 > **Correctness and reproducibility.** Exactly-once delivery is verified
 > across 4 producers × 4 consumers over 200,000 messages and across process
@@ -307,20 +321,3 @@ with an online-learned wake policy."
 `git rm -r --cached vault/`, re-add `vault/` to `.gitignore`, commit.
 
 ---
-
-## Notes for whoever fills the form
-
-- **Say "dual-core with SMT", never "quad-core".** `nproc` reports 4 on the
-  measurement machine; `lscpu` shows 2 cores per socket.
-- **Never quote a small-message ratio without its waiter posture.** 16.8× is
-  spin/dedicated-core; blocking is 0.93×.
-- **Do not quote 19.6× or an "18–20×" range.** Those came from the Layer 1
-  revision; the shipped code gives 16.8×.
-- **State the large-payload loss before anyone asks.** It is disclosed in the
-  Description above deliberately and should stay there.
-- **Do not claim fan-out growth past N=2.**
-- **Do not present Layer 3 as built.** It is designed and specified.
-- If a field has a hard character limit, cut from the Description's
-  measurement tables first — they are reproduced in the deck and README — and
-  keep the camera-pipeline opening, which is the part a non-specialist
-  understands immediately.

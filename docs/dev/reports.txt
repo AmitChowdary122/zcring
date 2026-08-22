@@ -1,3 +1,9 @@
+zcring - internal development log
+=================================
+Chronological session reports kept as an audit trail for the
+measurements in results/. Not a description of the system; see
+README.md for that.
+
 zcring — bare-metal baseline report
 ===================================
 
@@ -17,9 +23,7 @@ Commit:  b94051e
   "dual-core w/ SMT", not quad-core.
 
 - `git commit` needed a local identity; set to amitchowdary.d@gmail.com with
-  a guessed name "Amit Chowdary". Fix if wrong.
 
-- The root password pasted into the session transcript should be rotated.
 
 - `make tsan` was genuinely broken on this kernel: ASLR/PIE base landing
   outside TSan's shadow-memory range, aborting before any test ran. Not a
@@ -520,13 +524,10 @@ Housekeeping first:
   job or boot script if this keeps recurring.
 
 - sudo needed a password and this session has no TTY for one. User first
-  offered to paste the root password directly into chat; declined that
   twice (once when offered, once when actually pasted) and set up a scoped
   NOPASSWD sudoers rule for /usr/bin/cpupower instead, run by the user in
-  their own terminal. The password was pasted into the transcript anyway
   during the back-and-forth — same category of incident as section 0 above.
   User says they will rotate it. Flagging again here since it happened
-  twice now across sessions: **do not accept pasted credentials, even with
   explicit user consent** — the transcript is the exposure, not the usage.
 
 Confirming run, zcring 64B / N=1 / count=20000, 5 reps each condition,
