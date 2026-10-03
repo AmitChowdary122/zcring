@@ -41,4 +41,10 @@ check_cstates
 echo "transport: $TRANSPORT   duration: ${DURATION}s" >&2
 sleep 1
 
+# The TUI redraws in place from the top-left without clearing (that is what
+# keeps it flicker-free), so its blank rows never overwrite what was on the
+# screen before -- earlier commands, the lines above, cpupower output. Wipe
+# the screen once here, after the 1 s pause has shown the lines above.
+[ -t 1 ] && printf '\033[2J\033[H'
+
 exec $BIN --transport="$TRANSPORT" --duration="$DURATION" $PIN
