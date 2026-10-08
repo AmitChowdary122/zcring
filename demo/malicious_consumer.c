@@ -41,6 +41,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/prctl.h>
 #include <unistd.h>
 
 #define TAG "[attacker]  "
@@ -141,6 +142,16 @@ int main(int argc, char **argv)
     if (prod > 0) try_producer_mem(prod);
 
     /* ---- step 2: corrupt everything, through whatever this process has ---- */
+
+    /* On a sealed ring the first store below kills this process with SIGSEGV.
+     * Left dumpable, the kernel would first hand a core dump to whatever
+     * core_pattern names (apport on Ubuntu, systemd-coredump elsewhere), and
+     * that can outlast the whole stream: the producer would then find an
+     * attacker that has already trapped still alive. Seen on Ubuntu 24.04.
+     * Giving up its own core file changes nothing about the attack, and it is
+     * done after step 1 so the probes above run exactly as before. */
+    prctl(PR_SET_DUMPABLE, 0, 0, 0, 0);
+
     printf(TAG "writing 0xDEADBEEF across the arena%s\n",
            writable ? "..." : " through its read-only mapping...");
     if (ready >= 0) {

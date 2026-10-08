@@ -189,14 +189,29 @@ int main(int argc, char **argv)
 
     int cst = 0, ast = 0;
     waitpid(cons, &cst, 0);
+
+    /* Judge the attacker by how it ended, not by whether it happened to be
+     * gone at this instant. On a sealed ring its first store traps before the
+     * stream is under way, but dying is not instantaneous, so allow it a
+     * bounded grace period (up to 1 s) before stopping it. An unsealed
+     * attacker never stops on its own, so that run does not wait. */
+    int done = 0;
+    for (int t = 0; t < (sealed ? 100 : 1) && !done; t++) {
+        if (waitpid(atk, &ast, WNOHANG) == atk) done = 1;
+        else if (sealed) usleep(10000);
+    }
     int stopped = 0;
-    if (waitpid(atk, &ast, WNOHANG) == 0) {
+    if (!done) {
         kill(atk, SIGTERM);
         waitpid(atk, &ast, 0);
         stopped = 1;
     }
+    int trapped = WIFSIGNALED(ast) && WTERMSIG(ast) == SIGSEGV;
 
-    if (stopped)
+    if (trapped)
+        printf("[producer]  attacker pid %d killed by SIGSEGV (%s)%s\n", (int)atk,
+               strsignal(SIGSEGV), stopped ? ", after a slow exit" : "");
+    else if (stopped)
         printf("[producer]  attacker pid %d still writing after the last message; "
                "stopped it with SIGTERM\n", (int)atk);
     else if (WIFSIGNALED(ast))
@@ -210,7 +225,6 @@ int main(int argc, char **argv)
            (unsigned long)n, (unsigned long)pre_commit_bad);
 
     int consumer_clean = WIFEXITED(cst) && WEXITSTATUS(cst) == 0;
-    int trapped = !stopped && WIFSIGNALED(ast) && WTERMSIG(ast) == SIGSEGV;
     int as_expected = sealed ? (consumer_clean && !pre_commit_bad && trapped)
                              : !consumer_clean;
     printf("[result]    %s\n", sealed
