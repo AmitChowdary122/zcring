@@ -3,6 +3,8 @@
  * Layer 1: lock-free MPMC ring over a memfd-backed mapping.
  * Layer 2: broadcast fan-out — one producer, N consumers, every consumer sees
  *          every message, still with zero copies for all of them.
+ * Layer 3: sealed rings (Phase 1, §14) — the kernel maps the arena read-only
+ *          for every consumer, so no consumer can corrupt what others read.
  *
  * The defining property: reserve()/acquire() hand back raw pointers INTO the
  * shared mapping. The caller constructs and reads messages in place. There is
@@ -921,6 +923,137 @@
  * at 2. Nothing was added to zc_reserve(), zc_commit(), zc_acquire() or
  * zc_release(): the recovery path is entirely off the fast path, exactly as
  * zc_bcast_reap() is.
+ *
+ * ===========================================================================
+ * 14. Sealed rings — Layer 3 Phase 1: a consumer that cannot write the arena
+ * ===========================================================================
+ *
+ * Everything above assumes every peer is honest. In a transport where every
+ * participant maps the segment read-write — every userspace zero-copy
+ * framework, this one included until this section — one buggy or hostile
+ * consumer can rewrite what every other consumer is reading. A broker can
+ * decide who attaches; it cannot take back a page the MMU has already been
+ * told is writable. Only the kernel can hand out a mapping that is unable to
+ * write — and it already offers one to userspace, through memfd seals. This
+ * section uses that rather than a module of our own (docs/LAYER3_DESIGN.md
+ * says what a module would still add, below).
+ *
+ * ---------------------------------------------------------------------------
+ * Mechanism
+ * ---------------------------------------------------------------------------
+ *
+ * zc_create_sealed() splits the ring across two memfds: the control block and
+ * slot array in one, the arena in another. The creator maps both writable,
+ * initialises them, and then seals the arena
+ *
+ *     F_SEAL_FUTURE_WRITE | F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_SEAL
+ *
+ * F_SEAL_FUTURE_WRITE (Linux 5.1) leaves mappings that already exist alone —
+ * the creator keeps its writable view — and refuses every future one. From
+ * that point the kernel refuses, for every process holding the fd: a writable
+ * MAP_SHARED mmap (EPERM); mprotect() of a read-only mapping up to write
+ * (EACCES — the seal strips VM_MAYWRITE, which is what makes this a property
+ * rather than a convention); the same through a fresh O_RDWR open of
+ * /proc/self/fd/N, because a seal belongs to the inode, not to the fd; write(2)
+ * and pwrite(2); hole punching; truncation; and a FOLL_FORCE write through
+ * /proc/self/mem. A store through the read-only mapping takes SIGSEGV in
+ * hardware. Each of those is an assertion in test_sealed_attack, run from a
+ * child that holds nothing but the fds, against a control arm that shows the
+ * same store landing on an unsealed ring.
+ *
+ * The seal is then checked the way an attacker would check it: creation tries
+ * a writable mapping of its own and requires EPERM. A kernel too old for the
+ * seal, or one that does not enforce it on the backing in use, fails creation
+ * with ENOTSUP. Returning a ring labelled sealed whose arena is not is the one
+ * outcome worse than failing, so this fails closed.
+ *
+ * The virtual layout does not change. The two files are mapped back to back
+ * at exactly the offsets a single-file ring uses — zc_geom() is shared by both
+ * create paths — so r->ctrl, r->slots and r->arena mean what they always did
+ * and the fast path cannot tell the difference. A consumer attaches with
+ * zc_attach_sealed(fd, arena_fd); plain zc_attach() refuses a sealed ring,
+ * because the control memfd alone does not contain the arena.
+ *
+ * ---------------------------------------------------------------------------
+ * Why only the arena, and what that leaves open
+ * ---------------------------------------------------------------------------
+ *
+ * A consumer must write the control block: its cursor (§1), its registration
+ * (join, leave, reap — §3), the waiter count in notify mode (§9), slot seq on
+ * unicast release, and §13's recovery path. So that file is sealed only
+ * against resizing, which stops a consumer truncating the ring out from under
+ * everyone. It remains writable, and a hostile consumer can still stall the
+ * ring, make others skip or repeat messages, or report a false length. What it
+ * can no longer do is change one byte of any message. zc_attach_sealed() takes
+ * the geometry it maps from a private copy, so the addresses a consumer
+ * dereferences are never ones a peer wrote.
+ *
+ * Phase 2 (LAYER3_DESIGN.md §4) closes the control block, and that is where
+ * the topology argument lives. A broadcast consumer writes nothing shared
+ * except its own cursor, so with one cursor per page it can be confined to
+ * that page. A unicast consumer must write slot seq to release a slot, so it
+ * cannot. Phase 1 protects the arena in both modes; full isolation is a
+ * property of one-writer-many-readers. Phase 2 moves cursors and therefore
+ * the shared layout; Phase 1 deliberately does not.
+ *
+ * Threat model, Phase 1:
+ *
+ *   consumer rewrites payload bytes ............. closed, by the seal
+ *   consumer truncates or hole-punches the arena  closed, by the seal
+ *   consumer resizes the control file ........... closed, SHRINK|GROW
+ *   consumer corrupts the control block ......... OPEN — Phase 2
+ *   consumer forked from the producer ........... inherits the producer's
+ *       writable mapping, which no seal reaches. zc_drop_write() replaces it
+ *       with one that can never be made writable; until a forked consumer
+ *       calls it, the MMU sees it as the producer. Consumers that are exec'd,
+ *       or receive the fds over a socket, never hold a writable view at all.
+ *   same-uid process writing through the producer's own mapping, via
+ *       /proc/<pid>/mem or ptrace ............... not a seal question. Closed
+ *       by running consumers under another uid, or by the producer calling
+ *       prctl(PR_SET_DUMPABLE, 0) — demo/attack_demo does, and with it left
+ *       dumpable the attack was verified to land. Not done here because it is
+ *       process-wide (it also disables core dumps), which a library should not
+ *       decide for its caller.
+ *   root, CAP_SYS_PTRACE, CAP_SYS_ADMIN ......... out of scope: they can read
+ *       and write any process's memory, and load modules.
+ *   producer writes garbage ..................... out of scope: it is the data
+ *       source.
+ *
+ * ---------------------------------------------------------------------------
+ * What a kernel module would still add
+ * ---------------------------------------------------------------------------
+ *
+ * A seal is per file and permanent. Nobody, ever, gets a new writable mapping
+ * of a sealed arena — so §13's replacement producer must be a process that
+ * already holds one (forked from the creator before it died), or the ring is
+ * recreated. And a seal only refuses *new* write access; it cannot take back a
+ * mapping a consumer already has, read-only or not, so it cannot evict. Per-
+ * role grants at any time, and revocation by zapping a peer's page tables, are
+ * what a /dev/zcring module would be for. Neither is needed to stop a consumer
+ * corrupting the data, which is the property this section exists to provide.
+ *
+ * ---------------------------------------------------------------------------
+ * Limits, and what did not change
+ * ---------------------------------------------------------------------------
+ *
+ *   - Linux >= 5.1. Older kernels refuse F_SEAL_FUTURE_WRITE and creation
+ *     fails with ENOTSUP; zc_create() and friends are unaffected.
+ *   - hugetlbfs: the seal must be enforced on hugetlbfs as well as shmem. The
+ *     probe checks; if it is not, an AUTO ring falls back to a shmem arena and
+ *     a REQUIRE ring fails. Not exercised where this was tested, because the
+ *     hugetlb pool there is empty — the THP-advise path is.
+ *   - A writable MAP_PRIVATE mapping of the arena is allowed. It is that
+ *     process's own copy-on-write copy; the tests check that writes to it
+ *     never reach the shared pages.
+ *
+ * The fast path is untouched. Sealing is entirely in create and attach: main()
+ * in bench and in demo/pipeline, which inline the whole of reserve, commit,
+ * acquire, release and wait, disassembles identically before and after this
+ * section; zc_create() produces a byte-identical layout across 48
+ * configurations of size, mode and huge-page policy; ZC_MODE_F_SEALED rides in
+ * the spare mode bits like §9 and §11 did; and zc_ring_t's new arena_fd sits in
+ * what was tail padding, so sizeof(zc_ring_t) is still 64. ZC_ABI_VERSION stays
+ * 2 and every dataset in results/ stands.
  */
 #ifndef ZCRING_H
 #define ZCRING_H

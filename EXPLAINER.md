@@ -160,9 +160,13 @@ care. The same limitation discovered by someone else reads as a cover-up.
 
 - Run everything on a laptop with **more cores**, to show the advantage keeps
   growing rather than hitting the ceiling of our small test machine.
-- Add a **guard** inside the operating system itself, so a broken program can't
-  scribble on the shared table and ruin things for everyone. Other systems
-  like ours can't do this — it's the strongest thing we could still add.
+- Finish the **guard**. The first part is built: the operating system now
+  hands every reader a view of the shared table that it physically cannot
+  write on, so a broken or hostile reader can't ruin the messages for everyone.
+  If it tries, the processor stops it on the spot (`make attack-demo` shows
+  exactly that). The next part is protecting the small notebook where readers
+  record how far they've got. Then comes letting the operating system throw a
+  misbehaving reader out entirely.
 - Let waiting readers **sleep properly** instead of watching the table
   constantly, so they stop burning power while nothing is happening.
 
@@ -180,9 +184,10 @@ and it is why the camera demo has three consumers rather than one.
 **It is not novel in its core.** Ring buffers over shared memory are
 well-trodden ground; what is here is careful engineering and honest
 measurement, plus one finding about atomics that we had not seen written down
-elsewhere. The part that would be genuinely new — letting the operating system
-police who may write to the shared region — is designed but not built, and is
-labelled that way throughout.
+elsewhere. The part that is more unusual — letting the operating system police who may
+write to the shared region — is built for the messages themselves and still
+only designed for the bookkeeping around them, and is labelled that way
+throughout.
 
 **Where it matters** is the camera demo: not "look, a faster number", but
 "this pipeline of programs keeps up when it previously could not, and nothing

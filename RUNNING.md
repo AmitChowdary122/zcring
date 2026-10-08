@@ -113,6 +113,32 @@ if you skip them:
   path, which is what `sweep.csv` was measured with. The two are therefore not
   directly comparable at N=1; the difference is the gate's own overhead.
 
+## 3b. Layer 3: the sealed-ring attack demo
+
+```bash
+make attack-demo
+```
+
+It runs the same hostile consumer (`build/malicious_consumer`) twice. The
+first run uses an unsealed ring and is *expected* to show corruption. The
+second uses a sealed ring and is expected to show every write route denied,
+the attacker killed by `SIGSEGV`, and `0 corrupted`. Each run ends in a
+`[result]` line. `build/attack_demo` exits non-zero if its run did not
+produce the outcome its mode should, so `./build/attack_demo` on its own
+works as a check.
+
+- **Needs Linux ≥ 5.1** for `F_SEAL_FUTURE_WRITE`. On an older kernel the
+  sealed run fails at creation with "Operation not supported", which is
+  deliberate: it refuses rather than pretending.
+- **No root, no module, no VM.** It runs as your user. Run as root, it drops
+  the attacker to uid 65534 first, because root can write any process's
+  memory and nothing short of not being root defends against that.
+- **Not a benchmark.** It takes well under a second and needs no pinning or
+  quiet machine. Nothing it prints is a latency.
+- The sealed-ring tests are the `sealed ring:` lines in `make test`. They
+  attack from a child that holds only the fds, and a control test shows the
+  same store landing on an unsealed ring.
+
 ## 4. Getting numbers worth quoting
 
 Latency tails are extremely sensitive to what else the machine is doing. For
