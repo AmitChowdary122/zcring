@@ -293,7 +293,79 @@ ax.text(50, 21, "Three consumers read the same frame. A copying transport would 
 note(ax, "make demo · runs unattended for ten minutes · resident memory flat, verified shared rather than duplicated via smaps_rollup")
 pdf.savefig(fig); plt.close(fig)
 
-# ------------------------------------------------------------- 11. limits ---
+# ------------------------------------------------------- 11. Layer 3 -------
+fig, ax = slide(pdf, "Security: a hostile consumer cannot write the data",
+                "Layer 3 Phase 1 · memfd seals: the kernel maps the payload arena read-only for every consumer")
+MONO = "DejaVu Sans Mono"
+TERM_BG, TERM_FG = "#1d2026", "#d8dde6"
+BAD, GOOD = "#f0a020", "#3ccf91"
+
+def terminal(y_top, head, head_col, lines, verdict, verdict_col):
+    ax.text(6, y_top, head, fontsize=12.5, fontweight="bold", color=head_col, va="top")
+    h = 4.2 + 3.05 * (len(lines) + 1)
+    y0 = y_top - 3.6 - h
+    ax.add_patch(FancyBboxPatch((6.4, y0), 44.6, h, boxstyle="round,pad=0.4,rounding_size=0.6",
+                                facecolor=TERM_BG, edgecolor="none"))
+    yy = y_top - 5.6
+    for left, right, col in lines:
+        ax.text(8, yy, left, fontsize=10.2, family=MONO, color=TERM_FG, va="top")
+        ax.text(49.6, yy, right, fontsize=10.2, family=MONO, color=col, va="top",
+                ha="right", fontweight="bold")
+        yy -= 3.05
+    ax.text(8, yy - 0.6, verdict, fontsize=10.2, family=MONO, color=verdict_col,
+            va="top", fontweight="bold")
+
+terminal(76, "Unsealed ring — every peer maps the arena read-write", WARN, [
+    ("mprotect(arena, PROT_WRITE)", "GRANTED", BAD),
+    ("mmap(arena fd, PROT_WRITE, MAP_SHARED)", "GRANTED", BAD),
+    ("reopen /proc/self/fd O_RDWR, mmap", "GRANTED", BAD),
+    ("write 0xDEADBEEF across the arena", "lands", BAD),
+], "consumer: 200000 received, 64008 corrupted", BAD)
+terminal(45.5, "Sealed ring — arena sealed F_SEAL_FUTURE_WRITE", ZC, [
+    ("mprotect(arena, PROT_WRITE)", "EACCES", GOOD),
+    ("mmap(arena fd, PROT_WRITE, MAP_SHARED)", "EPERM", GOOD),
+    ("reopen /proc/self/fd O_RDWR, mmap", "EPERM", GOOD),
+    ("write 0xDEADBEEF across the arena", "SIGSEGV", GOOD),
+], "consumer: 200000 received, 0 corrupted", GOOD)
+
+# threat table
+import textwrap
+ax.text(56, 76, "What Phase 1 protects, and what it does not", fontsize=12.5,
+        fontweight="bold", color=INK, va="top")
+TAG = {"CLOSED": (ZC, "white"), "OPEN": (WARN, "white"),
+       "CALLER": (OK, "white"), "OUT": ("#c3c7cf", INK)}
+rows = [
+ ("CLOSED", "Write, truncate or hole-punch the arena",
+  "the seal; the control file can't be resized"),
+ ("OPEN", "Rewrite the bookkeeping (seq, cursors, len)",
+  "no message byte changes, but an honest consumer can be shown a stale, "
+  "half-written, repeated, skipped or over-long message, or the ring stalls. Phase 2."),
+ ("CALLER", "Lie about a slot's length",
+  "a 4 KiB slot reported as 2 GiB: receivers clamp len to slot_size"),
+ ("CALLER", "Consumer forked from the producer",
+  "holds the writable view until zc_drop_write()"),
+ ("CALLER", "Same-uid write via /proc/<pid>/mem",
+  "non-dumpable producer, or a different uid"),
+ ("OUT", "root, CAP_SYS_PTRACE", "can write any process's memory anyway"),
+]
+yy = 70.5
+for tag, label, detail in rows:
+    fc, tc = TAG[tag]
+    ax.add_patch(FancyBboxPatch((56.3, yy - 2.55), 8.4, 2.9, boxstyle="round,pad=0.25,rounding_size=0.5",
+                                facecolor=fc, edgecolor="none"))
+    ax.text(60.5, yy - 1.1, tag, fontsize=9, color=tc, fontweight="bold",
+            ha="center", va="center")
+    ax.text(66.5, yy, label, fontsize=11.5, color=INK, va="top")
+    w = textwrap.fill(detail, 47)
+    ax.text(66.5, yy - 2.9, w, fontsize=10, color=MUTED, va="top", linespacing=1.35)
+    yy -= 2.9 + 2.45 * (w.count("\n") + 1) + 1.5
+
+note(ax, "make attack-demo · the same attacker binary both times; only a flag the producer takes differs · the unsealed count varies run to run\n"
+         "The kernel is in the setup path only: the fast path is instruction-identical, so every dataset in results/ stands · Linux ≥ 5.1, no kernel module",
+     y=5.5)
+pdf.savefig(fig); plt.close(fig)
+
+# ------------------------------------------------------------- 12. limits ---
 fig, ax = slide(pdf, "What it does not do, and what comes next",
                 "Stated by us rather than found by you")
 bullets(ax, [
@@ -303,10 +375,10 @@ bullets(ax, [
 ], y=72, size=12.5, step=5.0, wrap=104, lead_gap=3.9)
 ax.add_patch(FancyBboxPatch((6, 9), 88, 18, boxstyle="round,pad=0.6,rounding_size=0.8",
                             facecolor="#fdf3e0", edgecolor=WARN, lw=1.3))
-ax.text(50, 22, "Next: kernel-enforced arbitration", fontsize=16, fontweight="bold",
+ax.text(50, 22, "Next: Layer 3 Phase 2 and eviction", fontsize=16, fontweight="bold",
         color="#7a5200", ha="center")
-ax.text(50, 15, "A pure-userspace framework cannot stop a buggy or malicious peer from corrupting the shared ring.\n"
-                  "A kernel mediation layer closes exactly that gap - the one thing this design cannot do from userspace.",
+ax.text(50, 15, "Phase 1 stops a consumer writing the data. Phase 2 confines each broadcast consumer to its own cursor page;\n"
+                  "a /dev/zcring module would add live eviction. Both are designed in docs/LAYER3_DESIGN.md, not built.",
         fontsize=13, color="#7a5200", ha="center", va="center", linespacing=1.8)
 pdf.savefig(fig); plt.close(fig)
 
