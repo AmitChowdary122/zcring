@@ -4,7 +4,7 @@ LDFLAGS ?= -pthread
 
 BUILD := build
 
-.PHONY: all clean test sweep fanout tsan demo adaptive-trace
+.PHONY: all clean test sweep fanout tsan demo adaptive-trace attack-demo
 
 all: $(BUILD)/bench $(BUILD)/test_zcring
 
@@ -24,6 +24,12 @@ $(BUILD)/pipeline: demo/pipeline.c $(BUILD)/zcring.o | $(BUILD)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(BUILD)/adaptive_trace: bench/adaptive_trace.c $(BUILD)/zcring.o | $(BUILD)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BUILD)/attack_demo: demo/attack_demo.c $(BUILD)/zcring.o | $(BUILD)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BUILD)/malicious_consumer: demo/malicious_consumer.c $(BUILD)/zcring.o | $(BUILD)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 # Thread-sanitised build. Memory-ordering bugs in a lock-free ring are the
@@ -50,6 +56,13 @@ demo: $(BUILD)/pipeline
 
 adaptive-trace: $(BUILD)/adaptive_trace
 	@./scripts/adaptive_trace.sh
+
+# Layer 3 Phase 1 (zcring.h §14): the same hostile consumer against an
+# unsealed ring, then a sealed one. The first run is *expected* to show
+# corruption, so its exit status is not allowed to stop the second.
+attack-demo: $(BUILD)/attack_demo $(BUILD)/malicious_consumer
+	@$(BUILD)/attack_demo --unsealed || true
+	@$(BUILD)/attack_demo
 
 # results/ is deliberately NOT removed. Benchmark CSVs are committed evidence
 # that can cost an hour of quiet-machine time to regenerate, and a routine
