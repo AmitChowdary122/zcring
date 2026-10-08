@@ -182,6 +182,12 @@ tail. Measured effect at 64 B, N=1, 5 reps of 50000 messages each:
 | C-states enabled | 354 µs | 787 ns – 1.77 ms |
 | `cpupower idle-set -D 0` | **2.4 µs** | 1.4 µs – 4.2 µs |
 
+Reconfirmed the same day with the `performance` governor on a quiet machine,
+20,000 messages per rep: 579.9 µs (188 µs – 1.94 ms) enabled, **1.04 µs**
+(0.96 – 1.18 µs) disabled. That run is the one committed as
+`results/cstate_confirm.csv`, and it is the figure the README, the deck and
+the architecture diagram quote.
+
 The improvement is not just the mean dropping — the *variance collapses*.
 Before, p99.9 depended on whether the governor happened to guess C3 during
 that run; after, it is boringly consistent, which is the more important

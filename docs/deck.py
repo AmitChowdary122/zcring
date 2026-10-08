@@ -29,6 +29,15 @@ sweep  = load("results/sweep.csv", ["transport", "size"])
 fan_y  = load("results/fanout_yield_historical.csv", ["transport","consumers","size"])
 fan_n  = load("results/fanout.csv", ["transport","consumers","size"])
 
+# Slide 7's p99.9 box, from the committed C-state confirmation run (64 B, N=1,
+# 5 reps each). It used to quote an earlier same-day run that has no CSV here.
+_cs = collections.defaultdict(list)
+for r in csv.DictReader(open("results/cstate_confirm.csv")):
+    _cs[r["condition"]].append(int(r["p999_ns"]))
+def _us(ns):
+    return f"{ns/1e6:.2f} ms" if ns >= 1e6 else (f"{ns/1e3:.0f} µs" if ns >= 1e5 else f"{ns/1e3:.2f} µs")
+CS_ON, CS_OFF = _cs["cstates_enabled_powersave"], _cs["cstates_disabled_performance_quiet"]
+
 def slide(pdf, title, kicker=None):
     fig = plt.figure(figsize=(W, H)); fig.patch.set_facecolor("white")
     ax = fig.add_axes([0, 0, 1, 1]); ax.set_xlim(0, 100); ax.set_ylim(0, 100); ax.axis("off")
@@ -224,17 +233,18 @@ ax.add_patch(FancyBboxPatch((44, 30), 50, 42, boxstyle="round,pad=0.6,rounding_s
                             facecolor="white", edgecolor=ZC, lw=1.6))
 ax.text(69, 67, "p99.9 at 64 B, 5 repetitions", fontsize=13.5, color=MUTED, ha="center")
 ax.text(51, 58, "idle states enabled", fontsize=13, color=MUTED)
-ax.text(90, 58, "354 µs", fontsize=17, color=WARN, fontweight="bold", ha="right")
+ax.text(90, 58, _us(statistics.mean(CS_ON)), fontsize=17, color=WARN, fontweight="bold", ha="right")
 ax.text(51, 51, "range across reps", fontsize=12, color=FAINT)
-ax.text(90, 51, "787 ns – 1.77 ms", fontsize=12.5, color=FAINT, ha="right")
+ax.text(90, 51, f"{_us(min(CS_ON))} – {_us(max(CS_ON))}", fontsize=12.5, color=FAINT, ha="right")
 ax.plot([49, 90], [45, 45], color="#e3e6ea", lw=1)
 ax.text(51, 39, "deep idle disabled", fontsize=13, color=MUTED)
-ax.text(90, 39, "2.4 µs", fontsize=19, color=ZC, fontweight="bold", ha="right")
+ax.text(90, 39, _us(statistics.mean(CS_OFF)), fontsize=19, color=ZC, fontweight="bold", ha="right")
 ax.text(51, 33.5, "range across reps", fontsize=12, color=FAINT)
-ax.text(90, 33.5, "1.4 – 4.2 µs", fontsize=12.5, color=FAINT, ha="right")
+ax.text(90, 33.5, f"{_us(min(CS_OFF))} – {_us(max(CS_OFF))}", fontsize=12.5, color=FAINT, ha="right")
 ax.text(50, 21, "The mean dropping is not the point. The variance collapsing is.",
         fontsize=15, color=INK, ha="center", fontweight="bold")
-note(ax, "p99.99 still shows a smaller, separate source (IRQ / scheduling jitter). Disclosed, and the target of the isolcpus / PREEMPT_RT work.")
+note(ax, "Deep idle disabled = cpupower idle-set -D 0, performance governor, quiet machine. Raw data: results/cstate_confirm.csv\n"
+         "p99.99 still shows a smaller, separate source (IRQ / scheduling jitter). Disclosed, and the target of the isolcpus / PREEMPT_RT work.")
 pdf.savefig(fig); plt.close(fig)
 
 # ---------------------------------------------------- 8. adaptive policy ----
@@ -276,7 +286,7 @@ pdf.savefig(fig); plt.close(fig)
 
 # --------------------------------------------------------------- 10. demo ---
 fig, ax = slide(pdf, "What it enables",
-                "Camera → inference + display + recorder, one producer feeding three consumers")
+                "Camera → edge-count + jitter + checksum: one producer feeding three consumers")
 ax.text(6, 70, "640×480 frames at 30 fps, three consumers, ten minutes, run against\n"
                "an identical pipeline over three UNIX sockets.",
         fontsize=14.5, color=INK, va="top", linespacing=1.7)
@@ -290,7 +300,7 @@ for i,(k,v,c) in enumerate([("frames delivered","18 000/18 000",INK),
             wrap=True)
 ax.text(50, 21, "Three consumers read the same frame. A copying transport would move it three times.",
         fontsize=14.5, color=INK, ha="center", fontweight="bold")
-note(ax, "make demo · runs unattended for ten minutes · resident memory flat, verified shared rather than duplicated via smaps_rollup")
+note(ax, "DURATION=600 make demo (the ten-minute soak; the default is 60 s) · resident memory flat, verified shared via smaps_rollup")
 pdf.savefig(fig); plt.close(fig)
 
 # ------------------------------------------------------- 11. Layer 3 -------

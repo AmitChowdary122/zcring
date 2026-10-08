@@ -855,9 +855,10 @@ online-learned spin budget (above), and Layer 3 Phase 1, sealed rings (above).
   Nothing can evict a live consumer, and a sealed arena can never be mapped
   writable again, so a replacement producer after a crash must already hold
   the mapping (Phase 3, or the module — see `docs/LAYER3_DESIGN.md`). Sealed
-  rings need Linux ≥ 5.1. Verified on Linux 6.18 / x86_64; the hugetlbfs arena
-  path is guarded by the creation-time self-check but was not exercised,
-  because the hugetlb pool on the test machine was empty.
+  rings need Linux ≥ 5.1. Verified on Linux 6.18, 7.0 (the i3) and 6.8 /
+  x86_64; the hugetlbfs arena path is guarded by the creation-time self-check
+  but was not exercised, because the hugetlb pool on the test machine was
+  empty.
 
 - **The measurement machine failed and was recovered.** The i3-1115G4 died on
   14 Aug (drive fault) and was revived on 20 Aug; the canonical datasets were

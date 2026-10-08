@@ -41,6 +41,10 @@ MEAS_64B  = f"{_sweep_ratio('64'):.1f}\u00d7 vs pipe"
 MEAS_1KIB = f"{_sweep_ratio('1024'):.1f}\u00d7"
 MEAS_FAN  = " / ".join(f"{_fan_ratio(n):.2f}\u00d7" for n in ("1", "2", "4"))
 
+_cq = [int(r["p999_ns"]) for r in csv.DictReader(open("results/cstate_confirm.csv"))
+       if r["condition"] == "cstates_disabled_performance_quiet"]
+MEAS_P999 = f"{statistics.mean(_cq)/1e3:.2f} µs, {min(_cq)/1e3:.2f}–{max(_cq)/1e3:.2f} µs"
+
 
 INK      = "#14161a"
 MUTED    = "#5f6470"
@@ -143,11 +147,11 @@ box(5, 17.5, 30, 13, "memfd_create · mmap",
 box(38, 17.5, 30, 13, "futex WAIT / WAKE",
     "Layer 2 notification path\nwoken only when a waiter flag is set",
     ec=KERN, fc="white", fs=10.5)
-box(71, 17.5, 37, 13, "Layer 3 — arbitration device  (planned)",
-    "kernel-enforced access control over the ring:\n"
-    "a buggy or malicious peer cannot corrupt it.\n"
-    "Pure-userspace frameworks structurally cannot.",
-    ec=PLAN, fc=PLAN_BG, fs=10.5, dashed=True)
+box(71, 17.5, 37, 13, "memfd seals — Layer 3 Phase 1",
+    "arena sealed F_SEAL_FUTURE_WRITE at create:\n"
+    "every consumer maps it read-only, so a stray\n"
+    "or hostile store traps in hardware. Setup only.",
+    ec=SHM, fc="white", fs=10.5, dashed=True)
 
 arrow(20, 43, 20, 30.5, color=KERN, lw=1.4, dashed=True, style="<|-|>")
 ax.text(21.2, 36.4, "setup", fontsize=9, color=MUTED)
@@ -195,7 +199,7 @@ ax.text(RX + 1, 57.5, "MEASURED  ·  bare metal, dual-core + SMT",
         fontsize=11, fontweight="bold", color=INK, va="top")
 meas = [("64 B, one consumer", MEAS_64B),
         ("1 KiB, one consumer", MEAS_1KIB),
-        ("p99.9 @ 64 B", "1.04 µs, sub-2 µs spread"),
+        ("p99.9 @ 64 B, deep idle off", MEAS_P999),
         ("1 MiB   N=1 / N=2 / N=4", MEAS_FAN)]
 y = 53.6
 for k, v in meas:
@@ -210,8 +214,8 @@ ax.text(RX + 1, y + 0.6, "Publication is O(1) in N; copying transports are O(N).
 ax.text(RX + 1, 34.5, "LAYERS", fontsize=11, fontweight="bold", color=INK, va="top")
 layers = [("L1", "lock-free MPMC ring, in-place construction", SHM, "done"),
           ("L2", "broadcast fan-out, backpressure, reap", SHM, "done"),
-          ("L2+", "adaptive spin→futex, threshold learned online", PLAN, "next"),
-          ("L3", "kernel arbitration — security boundary", PLAN, "planned")]
+          ("L2+", "adaptive spin→futex, threshold learned online", SHM, "done"),
+          ("L3", "sealed arena, read-only to consumers", SHM, "Phase 1 done")]
 y = 30.6
 for tag, desc, col, state in layers:
     ax.add_patch(Rectangle((RX + 1, y - 1.3), 4.6, 2.6, facecolor=col,
@@ -228,7 +232,7 @@ ax.text(RX + 1, 12.8,
         "exactly-once verified: 4 producers × 4 consumers, 200 000 messages\n"
         "every figure traceable to committed raw data; suite re-measured on a\n"
         "separate occasion and reproduced within 1.5% on the fan-out result",
-        fontsize=8.8, color=MUTED, va="top", linespacing=1.7)
+        fontsize=8.2, color=MUTED, va="top", linespacing=1.75)
 
 plt.tight_layout(pad=0.4)
 plt.savefig("docs/architecture.png", dpi=100, facecolor="white",

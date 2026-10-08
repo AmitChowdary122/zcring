@@ -167,8 +167,11 @@ care. The same limitation discovered by someone else reads as a cover-up.
   exactly that). The next part is protecting the small notebook where readers
   record how far they've got. Then comes letting the operating system throw a
   misbehaving reader out entirely.
-- Let waiting readers **sleep properly** instead of watching the table
-  constantly, so they stop burning power while nothing is happening.
+- Let a reader **wait on this and other things at once**. Readers can already
+  sleep while nothing is arriving instead of watching the table constantly;
+  what they can't yet do is wait for a message here and, say, a network
+  connection in the same breath, the standard way Linux programs wait on
+  several things together.
 
 ## 9. What this is good at, and what it isn't
 
@@ -184,10 +187,10 @@ and it is why the camera demo has three consumers rather than one.
 **It is not novel in its core.** Ring buffers over shared memory are
 well-trodden ground; what is here is careful engineering and honest
 measurement, plus one finding about atomics that we had not seen written down
-elsewhere. The part that is more unusual — letting the operating system police who may
-write to the shared region — is built for the messages themselves and still
-only designed for the bookkeeping around them, and is labelled that way
-throughout.
+elsewhere. The part that is more unusual — letting the operating system
+police who may write to the shared region — is built for the messages
+themselves and still only designed for the bookkeeping around them, and is
+labelled that way throughout.
 
 **Where it matters** is the camera demo: not "look, a faster number", but
 "this pipeline of programs keeps up when it previously could not, and nothing
