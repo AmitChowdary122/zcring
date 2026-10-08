@@ -5,9 +5,71 @@
 
 # STATUS — session handoff
 
-Last updated: **21 Aug 2026**. Read this after `CONTEXT.md` and before doing
+Last updated: **8 Oct 2026**. Read this after `CONTEXT.md` and before doing
 anything. It records decisions and open problems that exist nowhere in the
 code, and that a fresh session will otherwise get wrong.
+
+---
+
+## ⚠ READ FIRST — Layer 3 Phase 1 is BUILT, with memfd seals, not a module (8 Oct)
+
+Shortlisted for Stage 2, with two days to the presentation. Layer 3 Phase 1
+was built in that window. **There is no kernel module.**
+
+**Why no module.** The design's premise ("only the kernel can hand out a
+mapping that is unable to write") is true, but stock Linux already does it:
+`F_SEAL_FUTURE_WRITE` (5.1+). That seal is exactly LAYER3_DESIGN §4's
+`VM_WRITE`/`VM_MAYWRITE` logic, and it survives `/proc/self/fd` reopen
+because seals belong to the inode. This was verified empirically before
+building. A judge asking "why not just seal the memfd?" would have sunk a
+module-based Phase 1. Now the answer is "we did".
+
+**What exists:**
+- **API:** `zc_create_sealed`, `zc_attach_sealed`, `zc_arena_fd`,
+  `zc_drop_write`. Design rationale and threat model are in `zcring.h` §14.
+- **How it works:** the arena lives in its own memfd and is sealed after the
+  producer maps it. The ctrl memfd is sealed SHRINK|GROW only. Creation probes
+  the seal and **fails closed** (ENOTSUP).
+- **Tests:** 7 `test_sealed_*` tests in `make test`, TSan clean. They attack
+  from a child holding only the fds, with an unsealed control arm.
+  - A mutant with the seal removed fails 10 checks.
+  - **Pitfall:** the file's usual `if (failures) return;` guard silently
+    skipped later tests after the first failure. The new tests guard on their
+    own setup instead.
+- **Demo:** `make attack-demo`. Same attacker binary, unsealed vs sealed.
+  15/15 runs each way, plus 10/10 sealed as a non-root user.
+
+**Fast path proven unchanged — do not re-measure.**
+- Per-function disassembly diff: `main()` of `bench` and `pipeline` is
+  identical. Only rodata addresses moved, because new strings were added.
+- `zc_wake` is identical.
+- `zc_create()` layout is identical across 48 configs, checked against the
+  pre-change build.
+- `zc_ring_t.arena_fd` sits in fd's tail padding, so sizeof stays 64.
+- ABI v2.
+- `zcring.c` was otherwise touched only in create/attach/close/map.
+- `results/` stands.
+
+**Found while building — keep these straight:**
+- **Same-uid `/proc/<producer>/mem` bypasses ANY per-mapping protection,**
+  module or seal. This was verified to land with the producer dumpable. It is
+  closed only by `PR_SET_DUMPABLE 0` (the demo does this) or by running
+  consumers under a different uid. The library does not set it, because it is
+  process-wide.
+- **Forked consumers inherit the producer's RW mapping.** They must call
+  `zc_drop_write()`. Exec'd consumers never hold RW.
+- **Phase 1 protects unicast too.** The topology claim (broadcast only)
+  applies to Phase 2, the ctrl block. Do not restate it as a Phase 1 limit.
+- **Not done:**
+  - Phase 2 (ctrl block still consumer-writable).
+  - Eviction, and re-granting producer write access. Both need the module.
+  - hugetlb sealed arena not exercised (empty pool). Guarded by the probe.
+
+**Before the presentation:** run `make test` and `make attack-demo` on the
+demo machine itself. Everything here was verified on Linux 6.18 in a cloud
+container, not on the i3. The `eventfd`/`epoll` bridge (last Layer 2 piece)
+is still open. It was deliberately sequenced after this, and it touches
+`zc_wake`, which `results/fanout.csv` was measured through.
 
 ---
 
@@ -154,10 +216,10 @@ quiesced re-run before it is worth anything.
   `_Static_assert`s in the header now enforce that. TSan clean. Full
   derivation in `src/zcring.h` §§5–10. See "Adaptive notification" below for
   what a fresh session needs to know.
-- **Layer 3 designed, not built** (9 Aug) — `docs/LAYER3_DESIGN.md` is the
-  full brief: threat model, architecture, phasing, decision gate. **Read it
-  before writing a line of kernel code.** Chosen as the next build item on
-  14 Aug over the Stage 1 form text. See "Layer 3" below.
+- **Layer 3 Phase 1 BUILT (8 Oct) with memfd seals, no module** — see the
+  top of this file and `zcring.h` §14. Phases 2–3 remain as designed in
+  `docs/LAYER3_DESIGN.md` (whose new §0 records what changed). The 14 Aug
+  "Layer 3" section below is the superseded module plan.
 - **Stage 1 artifacts**: architecture diagram ✅ (256 KB), deck ✅ (84 KB,
   11 slides), form text ✅ (`docs/dev/STAGE1_SUBMISSION.md` — every field drafted,
   requoted against the 20 Aug canonical data), **repo public ✅**.

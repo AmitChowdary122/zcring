@@ -9,7 +9,9 @@
 #include "../src/zcring.h"
 
 #include <errno.h>
+#include <fcntl.h>    /* open/fallocate: §14's tests attack the arena fd directly */
 #include <pthread.h>
+#include <setjmp.h>   /* §14: a trapped store is caught, not merely died of */
 #include <signal.h>   /* kill/SIGKILL/pause: §13's recovery tests kill for real */
 #include <stdio.h>
 #include <stdlib.h>
@@ -1185,6 +1187,469 @@ static void test_huge_strict_and_attach(void)
     zc_close(&r);
 }
 
+/* ---- Layer 3 Phase 1: sealed rings (§14) ----
+ *
+ * The claim is about what a consumer *cannot* do, so these tests are written
+ * as the attack rather than as the API. A child that holds the ring only
+ * through its fds — as an unrelated process would — tries every route a
+ * hostile consumer has to a writable view of the arena, then simply stores
+ * into it. Every route must fail and the store must trap. The same store run
+ * against an unsealed ring must land, or the sealed result would prove
+ * nothing about the seal. */
+
+static sigjmp_buf seal_jb;
+static void seal_segv(int sig) { (void)sig; siglongjmp(seal_jb, 1); }
+
+/* 1 if a store to p trapped, 0 if it landed. Caught with a handler rather
+ * than left to kill the child: under ThreadSanitizer a SIGSEGV is reported
+ * and turned into exit code 66, which a WTERMSIG check would misread as the
+ * seal failing. */
+static int store_traps(volatile uint8_t *p, uint8_t v)
+{
+    struct sigaction sa, old;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_handler = seal_segv;
+    sigaction(SIGSEGV, &sa, &old);
+    int trapped = 0;
+    if (sigsetjmp(seal_jb, 1) == 0) *p = v;
+    else trapped = 1;
+    sigaction(SIGSEGV, &old, NULL);
+    return trapped;
+}
+
+enum {
+    ATK_MPROTECT, ATK_MMAP_RW, ATK_REOPEN_RW, ATK_PWRITE, ATK_PUNCH,
+    ATK_SHRINK_ARENA, ATK_SHRINK_CTRL, ATK_PROC_MEM, ATK_PRIVATE_COW,
+    ATK_STORE, ATK_N
+};
+static const char *const atk_name[ATK_N] = {
+    "mprotect(arena, PROT_WRITE)",
+    "mmap(arena fd, PROT_WRITE, MAP_SHARED)",
+    "reopen /proc/self/fd O_RDWR, then mmap writable",
+    "pwrite(arena fd)",
+    "fallocate(arena fd, PUNCH_HOLE)",
+    "ftruncate(arena fd) shrink",
+    "ftruncate(control fd) shrink",
+    "write via /proc/self/mem",
+    "MAP_PRIVATE copy-on-write reaching shared pages",
+    "plain store into the arena",
+};
+
+/* Every route to the arena a consumer holding (fd, afd) and a read-only
+ * mapping has. won[i] is set if route i got a write into shared memory. Each
+ * route aims at its own byte, so one that lands cannot make a later one look
+ * as though it did. The shrinks are by one byte so that, should one succeed,
+ * the page holding EOF stays mapped and the parent reports a failure rather
+ * than dying of SIGBUS. */
+static void seal_attack(zc_ring_t *peer, int fd, int afd, _Atomic uint8_t *won)
+{
+    uint8_t *arena = peer->arena;
+    size_t   alen  = peer->map_size - (size_t)peer->ctrl->arena_off;
+    char     path[64];
+#define AT(i) (arena + 8 + (i))
+#define FLIP(i) ((uint8_t)(*AT(i) ^ 0xFF))
+
+    if (mprotect(arena, alen, PROT_READ | PROT_WRITE) == 0)
+        atomic_store(&won[ATK_MPROTECT], 1);
+
+    void *q = mmap(NULL, alen, PROT_READ | PROT_WRITE, MAP_SHARED, afd, 0);
+    if (q != MAP_FAILED) { atomic_store(&won[ATK_MMAP_RW], 1); munmap(q, alen); }
+
+    snprintf(path, sizeof path, "/proc/self/fd/%d", afd);
+    int rw = open(path, O_RDWR | O_CLOEXEC);
+    if (rw >= 0) {
+        q = mmap(NULL, alen, PROT_READ | PROT_WRITE, MAP_SHARED, rw, 0);
+        if (q != MAP_FAILED) { atomic_store(&won[ATK_REOPEN_RW], 1); munmap(q, alen); }
+        close(rw);
+    }
+
+    uint8_t x = FLIP(ATK_PWRITE);
+    if (pwrite(afd, &x, 1, 8 + ATK_PWRITE) == 1) atomic_store(&won[ATK_PWRITE], 1);
+    if (fallocate(afd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, 0,
+                  (off_t)alen) == 0)
+        atomic_store(&won[ATK_PUNCH], 1);
+    if (ftruncate(afd, (off_t)alen - 1) == 0)
+        atomic_store(&won[ATK_SHRINK_ARENA], 1);
+    if (ftruncate(fd, (off_t)peer->ctrl->arena_off - 1) == 0)
+        atomic_store(&won[ATK_SHRINK_CTRL], 1);
+
+    /* /proc/self/mem writes with FOLL_FORCE, which is how a debugger plants a
+     * breakpoint in read-only text. On a shared mapping without VM_MAYWRITE
+     * the kernel refuses it rather than COWing a shared page. */
+    int mem = open("/proc/self/mem", O_RDWR | O_CLOEXEC);
+    if (mem >= 0) {
+        x = FLIP(ATK_PROC_MEM);
+        if (pwrite(mem, &x, 1, (off_t)(uintptr_t)AT(ATK_PROC_MEM)) == 1 &&
+            *AT(ATK_PROC_MEM) == x)
+            atomic_store(&won[ATK_PROC_MEM], 1);
+        close(mem);
+    }
+
+    /* Allowed, and harmless: a private mapping is the consumer's own copy.
+     * What must not happen is the write reaching the pages everyone shares. */
+    q = mmap(NULL, alen, PROT_READ | PROT_WRITE, MAP_PRIVATE, afd, 0);
+    if (q != MAP_FAILED) {
+        x = FLIP(ATK_PRIVATE_COW);
+        ((volatile uint8_t *)q)[8 + ATK_PRIVATE_COW] = x;
+        if (*AT(ATK_PRIVATE_COW) == x) atomic_store(&won[ATK_PRIVATE_COW], 1);
+        munmap(q, alen);
+    }
+
+    if (!store_traps(AT(ATK_STORE), FLIP(ATK_STORE)))
+        atomic_store(&won[ATK_STORE], 1);
+#undef FLIP
+#undef AT
+}
+
+#define SEAL_SLOTS 16
+
+static void seal_publish(zc_ring_t *r)
+{
+    for (uint64_t i = 0; i < SEAL_SLOTS; i++) {
+        uint64_t pos; void *p;
+        while (!(p = zc_bcast_reserve(r, &pos))) sched_yield();
+        fill(p, i);
+        zc_bcast_commit(r, pos, SLOT_SIZE);
+    }
+}
+
+/* Count slots in the creator's own view that no longer hold what it wrote. */
+static uint32_t seal_damage(zc_ring_t *r)
+{
+    uint32_t bad = 0;
+    for (uint64_t i = 0; i < SEAL_SLOTS; i++) {
+        uint64_t id;
+        if (verify(r->arena + i * SLOT_SIZE, &id) != 0 || id != i) bad++;
+    }
+    return bad;
+}
+
+static void test_sealed_attack(void)
+{
+    printf("sealed ring: a consumer cannot get a writable view of the arena\n");
+    zc_ring_t r;
+    if (zc_create_sealed(&r, SEAL_SLOTS, SLOT_SIZE, ZC_MODE_BROADCAST) != 0) {
+        CHECK(0, "zc_create_sealed failed: %s", strerror(errno));
+        return;
+    }
+    CHECK(zc_arena_fd(&r) >= 0, "sealed ring has no arena fd");
+    seal_publish(&r);
+
+    _Atomic uint8_t *won = mmap(NULL, ATK_N, PROT_READ | PROT_WRITE,
+                                MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    for (int i = 0; i < ATK_N; i++) atomic_store(&won[i], 0);
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        /* Shed everything inherited from the creator, including its writable
+         * mapping, and come back in the way an unrelated process would. */
+        int fd = dup(zc_fd(&r)), afd = dup(zc_arena_fd(&r));
+        zc_close(&r);
+        zc_ring_t peer;
+        if (zc_attach_sealed(&peer, fd, afd) != 0) _exit(2);
+        for (uint64_t i = 0; i < SEAL_SLOTS; i++) {
+            uint64_t id;
+            if (verify(peer.arena + i * SLOT_SIZE, &id) != 0 || id != i) _exit(3);
+        }
+        seal_attack(&peer, fd, afd, won);
+        _exit(0);
+    }
+    int st = 0;
+    waitpid(pid, &st, 0);
+    CHECK(WIFEXITED(st) && WEXITSTATUS(st) == 0,
+          "attacker exited %d (2 = attach failed, 3 = could not read the arena)",
+          WIFEXITED(st) ? WEXITSTATUS(st) : -1);
+    for (int i = 0; i < ATK_N; i++)
+        CHECK(!atomic_load(&won[i]), "%s reached shared memory", atk_name[i]);
+    CHECK(seal_damage(&r) == 0, "%u slots damaged in the producer's view",
+          seal_damage(&r));
+
+    munmap(won, ATK_N);
+    zc_close(&r);
+}
+
+/* The control arm. Without it, every failure above could be a broken attack
+ * rather than a working seal. */
+static void test_unsealed_attack_lands(void)
+{
+    printf("unsealed ring: the same store lands — the weakness §14 closes\n");
+    zc_ring_t r;
+    if (zc_create_bcast(&r, SEAL_SLOTS, SLOT_SIZE) != 0) {
+        CHECK(0, "zc_create_bcast failed");
+        return;
+    }
+    seal_publish(&r);
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        int fd = dup(zc_fd(&r));
+        zc_close(&r);
+        zc_ring_t peer;
+        if (zc_attach(&peer, fd) != 0) _exit(2);
+        _exit(store_traps(peer.arena + 8, 0xAA) ? 1 : 0);
+    }
+    int st = 0;
+    waitpid(pid, &st, 0);
+    CHECK(WIFEXITED(st) && WEXITSTATUS(st) == 0,
+          "store into an unsealed ring did not land (exit %d) — the attack "
+          "in test_sealed_attack would prove nothing",
+          WIFEXITED(st) ? WEXITSTATUS(st) : -1);
+    CHECK(seal_damage(&r) == 1, "expected exactly one damaged slot, saw %u",
+          seal_damage(&r));
+    zc_close(&r);
+}
+
+/* Read-only consumers are still full consumers: they join, sleep, are woken
+ * and advance their cursors, all of which write the control block — which is
+ * why only the arena is sealed (§14). */
+static void test_sealed_delivery(void)
+{
+    printf("sealed ring: broadcast + notify delivery to %d read-only consumers\n",
+           BC_CONS);
+    const uint64_t n = 5000;
+    zc_ring_t r;
+    if (zc_create_sealed(&r, 64, SLOT_SIZE,
+                         ZC_MODE_BROADCAST | ZC_MODE_F_NOTIFY) != 0) {
+        CHECK(0, "zc_create_sealed failed: %s", strerror(errno));
+        return;
+    }
+
+    _Atomic uint32_t *sh = mmap(NULL, sizeof(*sh) * 2, PROT_READ | PROT_WRITE,
+                                MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    _Atomic uint32_t *bad = sh, *ready = sh + 1;
+    atomic_store(bad, 0);
+    atomic_store(ready, 0);
+
+    pid_t kids[BC_CONS];
+    for (int k = 0; k < BC_CONS; k++) {
+        kids[k] = fork();
+        if (kids[k] == 0) {
+            int fd = dup(zc_fd(&r)), afd = dup(zc_arena_fd(&r));
+            zc_close(&r);
+            zc_ring_t peer;
+            if (zc_attach_sealed(&peer, fd, afd) != 0) {
+                atomic_fetch_add(bad, 1); atomic_fetch_add(ready, 1); _exit(2);
+            }
+            int id = zc_bcast_join(&peer);
+            if (id < 0) { atomic_fetch_add(bad, 1); atomic_fetch_add(ready, 1); _exit(1); }
+            zc_waiter_t w;
+            zc_waiter_init(&w, ZC_BUDGET_SHIFT);
+            atomic_fetch_add(ready, 1);
+            for (uint64_t want = 0; want < n; want++) {
+                uint64_t pos, got; uint32_t len;
+                void *p = zc_bcast_wait(&peer, &w, id, &pos, &len, 0);
+                if (!p || verify(p, &got) != 0 || got != want)
+                    atomic_fetch_add(bad, 1);
+                zc_bcast_release(&peer, id, pos);
+            }
+            zc_bcast_leave(&peer, id);
+            zc_close(&peer);
+            _exit(0);
+        }
+    }
+    while (atomic_load(ready) < BC_CONS) sched_yield();
+
+    for (uint64_t i = 0; i < n; i++) {
+        uint64_t pos; void *p;
+        while (!(p = zc_bcast_reserve(&r, &pos))) sched_yield();
+        fill(p, i);
+        zc_bcast_commit(&r, pos, SLOT_SIZE);
+    }
+    for (int k = 0; k < BC_CONS; k++) { int st = 0; waitpid(kids[k], &st, 0); }
+
+    CHECK(atomic_load(bad) == 0, "%u wrong/missing messages on a sealed ring",
+          atomic_load(bad));
+    munmap(sh, sizeof(*sh) * 2);
+    zc_close(&r);
+}
+
+/* Unicast needs consumers to write slot seq to release slots. That lives in
+ * the control block, not the arena, so Phase 1 seals unicast just as well.
+ * What it cannot do is Phase 2 — see §14. */
+static void test_sealed_unicast(void)
+{
+    printf("sealed ring: unicast delivery to a read-only consumer\n");
+    const uint32_t n = 10000;
+    zc_ring_t r;
+    if (zc_create_sealed(&r, 256, SLOT_SIZE, ZC_MODE_UNICAST) != 0) {
+        CHECK(0, "zc_create_sealed failed: %s", strerror(errno));
+        return;
+    }
+
+    _Atomic uint32_t *bad = mmap(NULL, sizeof(*bad), PROT_READ | PROT_WRITE,
+                                 MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    atomic_store(bad, 0);
+    pid_t pid = fork();
+    if (pid == 0) {
+        int fd = dup(zc_fd(&r)), afd = dup(zc_arena_fd(&r));
+        zc_close(&r);
+        zc_ring_t peer;
+        if (zc_attach_sealed(&peer, fd, afd) != 0) _exit(2);
+        for (uint32_t i = 0; i < n; i++) {
+            uint64_t pos, id; uint32_t len; void *p;
+            while (!(p = zc_acquire(&peer, &pos, &len))) sched_yield();
+            if (verify(p, &id) != 0 || id != i) atomic_fetch_add(bad, 1);
+            zc_release(&peer, pos);
+        }
+        if (!store_traps(peer.arena, 0)) atomic_fetch_add(bad, 1);
+        _exit(0);
+    }
+    for (uint32_t i = 0; i < n; i++) {
+        uint64_t pos; void *p;
+        while (!(p = zc_reserve(&r, &pos))) sched_yield();
+        fill(p, i);
+        zc_commit(&r, pos, SLOT_SIZE);
+    }
+    int st = 0;
+    waitpid(pid, &st, 0);
+    CHECK(WIFEXITED(st) && WEXITSTATUS(st) == 0, "consumer exited %d",
+          WIFEXITED(st) ? WEXITSTATUS(st) : -1);
+    CHECK(atomic_load(bad) == 0, "%u wrong messages (or an untrapped store)",
+          atomic_load(bad));
+    munmap(bad, sizeof(*bad));
+    zc_close(&r);
+}
+
+/* A consumer forked from the producer inherits the producer's writable
+ * mapping, which the seal cannot reach. zc_drop_write() swaps it for one that
+ * can never be made writable again. */
+static void test_sealed_drop_write(void)
+{
+    printf("sealed ring: a forked consumer can give up inherited write access\n");
+    zc_ring_t r;
+    if (zc_create_sealed(&r, SEAL_SLOTS, SLOT_SIZE, ZC_MODE_BROADCAST) != 0) {
+        CHECK(0, "zc_create_sealed failed: %s", strerror(errno));
+        return;
+    }
+    seal_publish(&r);
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        /* Same value back, so the inherited store proves writability without
+         * damaging anything. */
+        volatile uint8_t *b = r.arena + 8;
+        if (store_traps(b, *b)) _exit(2);          /* inherited: must land */
+        if (zc_drop_write(&r) != 0) _exit(3);
+        if (!store_traps(b, *b)) _exit(4);          /* dropped: must trap */
+        if (mprotect(r.arena, r.map_size - (size_t)r.ctrl->arena_off,
+                     PROT_READ | PROT_WRITE) == 0) _exit(5);
+        for (uint64_t i = 0; i < SEAL_SLOTS; i++) {
+            uint64_t id;
+            if (verify(r.arena + i * SLOT_SIZE, &id) != 0 || id != i) _exit(6);
+        }
+        _exit(0);
+    }
+    int st = 0;
+    waitpid(pid, &st, 0);
+    CHECK(WIFEXITED(st) && WEXITSTATUS(st) == 0,
+          "child exited %d (2 inherited mapping not writable, 3 drop failed, "
+          "4 store still lands, 5 mprotect regained write, 6 arena unreadable)",
+          WIFEXITED(st) ? WEXITSTATUS(st) : -1);
+
+    zc_ring_t u;
+    if (zc_create_bcast(&u, SEAL_SLOTS, SLOT_SIZE) != 0) {
+        CHECK(0, "zc_create_bcast failed");
+    } else {
+        CHECK(zc_drop_write(&u) == -1 && errno == EINVAL,
+              "zc_drop_write claimed success on an unsealed ring");
+        zc_close(&u);
+    }
+    zc_close(&r);
+}
+
+/* Each way of attaching that would hand out an unprotected or broken mapping
+ * must be refused, not quietly honoured. */
+static void test_sealed_attach_misuse(void)
+{
+    printf("sealed ring: attaches that would not be protected are refused\n");
+    zc_ring_t s, u, p;
+    if (zc_create_sealed(&s, SEAL_SLOTS, SLOT_SIZE, ZC_MODE_BROADCAST) != 0) {
+        CHECK(0, "zc_create_sealed failed: %s", strerror(errno));
+        return;
+    }
+    if (zc_create_bcast(&u, SEAL_SLOTS, SLOT_SIZE) != 0) {
+        CHECK(0, "zc_create_bcast failed");
+        zc_close(&s);
+        return;
+    }
+    CHECK(zc_arena_fd(&u) == -1, "unsealed ring reports an arena fd");
+
+    /* The control memfd alone does not contain the arena; mapping map_size of
+     * it would SIGBUS on the first payload access. */
+    int fd = dup(zc_fd(&s));
+    CHECK(zc_attach(&p, fd) == -1 && errno == EINVAL,
+          "zc_attach mapped a sealed ring through its control fd alone");
+    close(fd);
+
+    /* An arena fd that is not sealed is not an arena this ring handed out. */
+    fd = dup(zc_fd(&s));
+    int afd = dup(zc_fd(&u));
+    CHECK(zc_attach_sealed(&p, fd, afd) == -1,
+          "zc_attach_sealed accepted an unsealed arena fd");
+    close(fd); close(afd);
+
+    /* Sealed attach to a ring created unsealed. */
+    fd = dup(zc_fd(&u));
+    afd = dup(zc_arena_fd(&s));
+    CHECK(zc_attach_sealed(&p, fd, afd) == -1 && errno == EINVAL,
+          "zc_attach_sealed accepted an unsealed ring");
+    close(fd); close(afd);
+
+    zc_close(&u);
+    zc_close(&s);
+}
+
+/* The two-file mapping has to land the arena at the same huge-aligned offset
+ * the creator used, in every process, or a THP- or hugetlb-backed sealed ring
+ * reads the wrong bytes. */
+static void test_sealed_huge(void)
+{
+    printf("sealed ring: huge-page policy and a read-only peer agree\n");
+    uint32_t slots = huge_slots(NULL);
+    zc_ring_t r;
+    if (zc_create_sealed(&r, slots, SLOT_SIZE, ZC_MODE_UNICAST) != 0) {
+        CHECK(0, "zc_create_sealed failed: %s", strerror(errno));
+        return;
+    }
+    printf("    arena %zu KiB -> pages=%s\n", (size_t)slots * SLOT_SIZE >> 10,
+           zc_backing_name(zc_backing(&r)));
+
+    _Atomic uint32_t *bad = mmap(NULL, sizeof(*bad), PROT_READ | PROT_WRITE,
+                                 MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    atomic_store(bad, 0);
+    int backing = zc_backing(&r);
+    pid_t pid = fork();
+    if (pid == 0) {
+        int fd = dup(zc_fd(&r)), afd = dup(zc_arena_fd(&r));
+        zc_close(&r);
+        zc_ring_t peer;
+        if (zc_attach_sealed(&peer, fd, afd) != 0) _exit(2);
+        if (zc_backing(&peer) != backing) atomic_fetch_add(bad, 1);
+        for (uint32_t i = 0; i < 1000; i++) {
+            uint64_t pos, id; uint32_t len; void *p;
+            while (!(p = zc_acquire(&peer, &pos, &len))) sched_yield();
+            if (verify(p, &id) != 0 || id != i) atomic_fetch_add(bad, 1);
+            zc_release(&peer, pos);
+        }
+        if (!store_traps(peer.arena, 0)) atomic_fetch_add(bad, 1);
+        _exit(0);
+    }
+    for (uint32_t i = 0; i < 1000; i++) {
+        uint64_t pos; void *p;
+        while (!(p = zc_reserve(&r, &pos))) sched_yield();
+        fill(p, i);
+        zc_commit(&r, pos, SLOT_SIZE);
+    }
+    int st = 0;
+    waitpid(pid, &st, 0);
+    CHECK(WIFEXITED(st) && WEXITSTATUS(st) == 0, "peer exited %d",
+          WIFEXITED(st) ? WEXITSTATUS(st) : -1);
+    CHECK(atomic_load(bad) == 0, "%u disagreements on a huge sealed ring",
+          atomic_load(bad));
+    munmap(bad, sizeof(*bad));
+    zc_close(&r);
+}
+
 int main(void)
 {
     /* Line-buffer stdout. When it is a pipe the default is block buffering,
@@ -1212,6 +1677,13 @@ int main(void)
     test_notify_lost_wakeup_window();
     test_huge_fallback();
     test_huge_strict_and_attach();
+    test_sealed_attack();
+    test_unsealed_attack_lands();
+    test_sealed_delivery();
+    test_sealed_unicast();
+    test_sealed_drop_write();
+    test_sealed_attach_misuse();
+    test_sealed_huge();
 
     if (failures) { printf("\n%d check(s) FAILED\n", failures); return 1; }
     printf("\nall checks passed\n");

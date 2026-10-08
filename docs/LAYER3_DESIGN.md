@@ -1,11 +1,58 @@
-# Layer 3 — kernel-enforced arbitration (DESIGN ONLY — NOT IMPLEMENTED)
+# Layer 3 — kernel-enforced arbitration
 
-> **Status: specified, not built. No kernel code exists.** This document is a
-> design brief, included because it states the architectural argument for why
-> a kernel component is warranted at all — which is the question a
-> userspace-only zero-copy framework has to answer. Nothing in it is claimed
-> as working software. Written 9 Aug 2026; if it is ever implemented, it
-> should be built and tested inside a VM (see §8).
+> **Status (Oct 2026): Phase 1 is built — without a kernel module.** The
+> property Phase 1 asks for, a consumer that physically cannot write the
+> arena, is delivered by **memfd seals** (`F_SEAL_FUTURE_WRITE`), a mechanism
+> the stock kernel already provides. See `src/zcring.h` §14, the README's
+> Layer 3 section, `tests/test_zcring.c` (`test_sealed_*`) and
+> `make attack-demo`. Phases 2–3 are not built, and no kernel module exists.
+> The rest of this document is the original 9 Aug design brief, kept as
+> written. The section below says where it was overtaken.
+
+## 0. What changed between this design and the build
+
+**The premise needed one correction.** §1 says only the kernel can hand out
+a mapping that is unable to write. That is true, but it doesn't require *our*
+kernel code. Since Linux 5.1 a memfd sealed `F_SEAL_FUTURE_WRITE` keeps its
+existing writable mappings and refuses every new one. It also strips
+`VM_MAYWRITE`, so `mprotect` cannot bring write back. Reopening the fd through
+`/proc/self/fd` does not get around it either, because seals belong to the
+inode. That is §4's `mmap`/`VM_MAYWRITE` logic, already in mainline. So
+Phase 1 became a userspace change: the arena moves to its own memfd, and the
+producer seals it after mapping. A judge's obvious question, "why not just seal
+the memfd?", is now answered by doing exactly that.
+
+**What changed relative to the plan:**
+
+| Item | Plan | Built |
+|---|---|---|
+| Arena read-only for consumers | module `mmap` strips `VM_WRITE`/`VM_MAYWRITE` | memfd seal; same kernel guarantee, no module |
+| Userspace path with no module | must keep working | unchanged; `zc_create()` is untouched and its layout byte-identical |
+| Fast path unchanged | re-run a sweep and diff | stronger: `main()` of `bench` and `pipeline` disassembles identically |
+| Demo (§7) | `--no-kernel` vs module present | `attack_demo --unsealed` vs default: same attacker binary |
+| VM requirement (§8) | everything in a VM | not needed: no module is loaded, and the demo runs on bare metal |
+
+**Found during the build and not in the original threat model (§3):**
+
+- **Same-user `/proc/<pid>/mem`.** A consumer running as the producer's user
+  can write straight through the *producer's* writable mapping. No
+  per-mapping protection can stop that, module or seal. It is closed by
+  running consumers under another uid, or by the producer calling
+  `prctl(PR_SET_DUMPABLE, 0)`. Verified both ways in the demo.
+- **Forked consumers** inherit the producer's writable mapping. They give it
+  up with `zc_drop_write()`. Exec'd consumers never hold one.
+- **Phase 1 protects the arena in unicast mode too.** No consumer writes a
+  payload. §6's topology result applies to Phase 2, the control block: a
+  unicast consumer must write slot sequence numbers, so it cannot be confined
+  to its own page.
+
+**What a module is still for.** A seal is per file and permanent, and it only
+refuses *new* write access. Two things therefore remain kernel-module work,
+and they belong to Phases 2–3 rather than Phase 1:
+- **Per-role grants at any time.** A replacement producer can't otherwise get
+  write access to a sealed arena.
+- **Revocation.** Evicting a live consumer means zapping a mapping it already
+  holds.
 
 ---
 

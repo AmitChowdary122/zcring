@@ -12,8 +12,11 @@ Against the layered plan in [docs/dev/PLAN.md](docs/dev/PLAN.md): **Layer 1 comp
 in-place construction, and the `perf` proof obligation it set). **Layer 2 is
 three of four** — adaptive notification, broadcast fan-out, and crash
 recovery for both dead consumers *and* dead producers are done; the
-`eventfd`/`epoll` bridge is not. Layer 3 is designed (`docs/LAYER3_DESIGN.md`)
-and deliberately unbuilt. Layer 4 is untouched.
+`eventfd`/`epoll` bridge is not. **Layer 3 Phase 1 is built**: sealed rings,
+where the kernel maps the payload arena read-only for every consumer, so a
+hostile consumer cannot write a single byte of what the others read (below,
+and `make attack-demo`). Phases 2–3 of [`docs/LAYER3_DESIGN.md`](docs/LAYER3_DESIGN.md)
+— control-block isolation and eviction — are not built. Layer 4 is untouched.
 
 ```
 make            # build
@@ -22,6 +25,7 @@ make tsan       # thread-sanitised run — catches memory-ordering bugs
 make sweep      # payload sweep -> results/sweep.csv
 make fanout     # payload x consumer-count sweep -> results/fanout.csv
 make demo       # camera -> {edge-count, jitter, checksum} live fan-out demo
+make attack-demo  # Layer 3: a hostile consumer vs an unsealed, then a sealed ring
 ```
 
 ## Layer 2 — broadcast fan-out
@@ -181,6 +185,91 @@ replay above is reproducible from the committed CSVs; anyone can check it.
 
 Note the replay is *conservative* toward the learner: it scores the recorded
 budget and ignores ε-greedy exploration, so the real CPU cost is higher still.
+
+## Layer 3 — sealed rings: a consumer that cannot write the data
+
+Every userspace zero-copy framework, iceoryx included and zcring until this
+layer, has every participant map the shared segment read-write. One buggy or
+hostile consumer can then rewrite what every other consumer is reading. A
+broker daemon can decide who *attaches*; it cannot take back a page the MMU
+has already been told is writable. Only the kernel can hand out a mapping that
+is unable to write.
+
+The kernel already offers one: **memfd seals**. `zc_create_sealed()` puts the
+payload arena in a memfd of its own and, once the producer has mapped it,
+seals it `F_SEAL_FUTURE_WRITE` (Linux ≥ 5.1). The producer keeps its writable
+view; every other mapping, by anyone, is read-only, and the kernel refuses
+every way of changing that — `mprotect`, a writable `mmap`, reopening the fd
+through `/proc/self/fd`, `write`, hole punching, truncation, `/proc/self/mem`.
+A store through the read-only mapping traps in hardware. Creation checks the
+seal by trying to break it, and fails rather than hand back a ring that only
+looks sealed. The full argument is `src/zcring.h` §14.
+
+**The kernel is in the setup path only.** Sealing happens in create and
+attach. Reserve, commit, acquire and release are untouched: `main()` in
+`bench` and in `demo/pipeline` — which inline the whole fast path —
+disassemble identically before and after, and `zc_create()` produces a
+byte-identical layout across 48 configurations, so every dataset in
+`results/` stands.
+
+`make attack-demo` runs the same hostile consumer
+(`demo/malicious_consumer.c`, a separate executable that attaches through the
+fds like any consumer) against an unsealed ring and then a sealed one. Same
+binary, same attack; the only difference is a flag the *producer* takes:
+
+```
+=== UNSEALED ring: userspace-only zcring, every peer maps it read-write ===
+[attacker]  mprotect(arena, PROT_WRITE)                    -> GRANTED
+[attacker]  mmap(arena fd, PROT_WRITE, MAP_SHARED)         -> GRANTED
+[attacker]  reopen /proc/self/fd O_RDWR, mmap writable     -> GRANTED
+[attacker]  find producer's mapping via /proc/<pid>/maps   -> denied (Permission denied)
+[attacker]  writing 0xDEADBEEF across the arena...
+[consumer]  CORRUPTION: message 127, word 0 = 0xdeadbeefdeadbeef
+[consumer]  200000 messages received, 64008 corrupted
+[result]    unsealed: one hostile consumer corrupted the stream for everyone
+
+=== SEALED ring: arena sealed F_SEAL_FUTURE_WRITE (Layer 3 Phase 1) ===
+[attacker]  mprotect(arena, PROT_WRITE)                    -> denied (Permission denied)
+[attacker]  mmap(arena fd, PROT_WRITE, MAP_SHARED)         -> denied (Operation not permitted)
+[attacker]  reopen /proc/self/fd O_RDWR, mmap writable     -> denied (Operation not permitted)
+[attacker]  find producer's mapping via /proc/<pid>/maps   -> denied (Permission denied)
+[attacker]  writing 0xDEADBEEF across the arena through its read-only mapping...
+[consumer]  200000 messages received, 0 corrupted
+[producer]  attacker pid 2350 killed by SIGSEGV (Segmentation fault)
+[result]    sealed: the attack trapped in hardware; every message intact
+```
+
+(Abridged; corruption counts vary run to run. Both outcomes held in 15/15
+runs each, and the sealed one in 10/10 runs as a non-root user.)
+
+### What is protected, and what is not
+
+| Threat | Phase 1 |
+|---|---|
+| Consumer rewrites message payloads | **closed** — the seal |
+| Consumer truncates or hole-punches the arena | **closed** — the seal |
+| Consumer resizes the control file | **closed** — `F_SEAL_SHRINK`/`GROW` |
+| Consumer corrupts the control block (cursors, slot seq, lengths) | **open** — it cannot write a single byte of any message, but it can make an honest consumer see a stale, half-written, repeated, skipped or over-long message, or stall the ring. Phase 2. |
+| Consumer writes a false `slots[].len` | **open in the library, closed by the receiver.** `len` lives in the writable control block and `zc_acquire()`/`zc_bcast_acquire()` return it unclamped, so a peer can make a 4 KiB slot report a 2 GiB message (verified). A receiver that trusts it reads past its slot (crash) or overflows its own buffer. Receivers clamp `len` to `r->slot_size`, which is a private copy; the demo's consumer never trusts `len`. A clamp inside the library would change the consumer fast path, so it is deferred. |
+| Consumer `fork()`ed from the producer | holds the producer's writable mapping until it calls `zc_drop_write()`; exec'd consumers never hold one |
+| Same-user process writing through the producer's own mapping via `/proc/<pid>/mem` | closed only if consumers run as another user **or** the producer is non-dumpable (`prctl(PR_SET_DUMPABLE, 0)`, as the demo does). With the producer left dumpable this attack was verified to land. |
+| root / `CAP_SYS_PTRACE` | out of scope |
+
+**The protection comes from the topology.** Phase 1 protects the arena in
+both modes, because no consumer, unicast or broadcast, needs to write a
+payload. Protecting the control block as well (Phase 2) only works in
+broadcast. A broadcast consumer writes nothing shared except its own cursor,
+so it can be confined to that cursor's page. A unicast consumer has to write
+slot sequence numbers to release slots, so it cannot. Full isolation follows
+from one-writer-many-readers, not from shared memory as such.
+
+**What a kernel module would still add.** A seal is per file and permanent,
+and it only refuses *new* write access. It cannot give a restarted producer
+write access again, and it cannot take a mapping away from a consumer that
+is already attached. Granting write access per role at any time, and evicting
+a live consumer, are what the `/dev/zcring` module in
+[`docs/LAYER3_DESIGN.md`](docs/LAYER3_DESIGN.md) is for. Neither is needed to
+stop a consumer writing the data.
 
 ## Benchmark methodology, and the trap in it
 
@@ -755,8 +844,20 @@ Open problem #3, the same hardware ceiling as N=4 fan-out.
 ## Known gaps
 
 **Done since:** fan-out to N consumers (above), consumer-side crash recovery
-via `zc_bcast_reap()`, and adaptive spin-then-futex notification with an
-online-learned spin budget (above).
+via `zc_bcast_reap()`, adaptive spin-then-futex notification with an
+online-learned spin budget (above), and Layer 3 Phase 1, sealed rings (above).
+
+- **Layer 3 is Phase 1 only.** The arena is protected; the control block is
+  still writable by every consumer. Through it a consumer cannot write a
+  message byte, but it can make an honest consumer see a stale, half-written,
+  repeated, skipped or over-long message, or stall the ring (Phase 2). Until
+  the library clamps `len`, receivers clamp it to `slot_size` themselves.
+  Nothing can evict a live consumer, and a sealed arena can never be mapped
+  writable again, so a replacement producer after a crash must already hold
+  the mapping (Phase 3, or the module — see `docs/LAYER3_DESIGN.md`). Sealed
+  rings need Linux ≥ 5.1. Verified on Linux 6.18 / x86_64; the hugetlbfs arena
+  path is guarded by the creation-time self-check but was not exercised,
+  because the hugetlb pool on the test machine was empty.
 
 - **The measurement machine failed and was recovered.** The i3-1115G4 died on
   14 Aug (drive fault) and was revived on 20 Aug; the canonical datasets were

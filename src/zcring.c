@@ -9,6 +9,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -26,6 +27,25 @@
 #endif
 #ifndef MADV_HUGEPAGE
 #define MADV_HUGEPAGE 14
+#endif
+/* memfd sealing (§14). Same reasoning again: present in the kernel since 3.17
+ * (F_SEAL_FUTURE_WRITE since 5.1) and absent from older libc headers. A kernel
+ * without them refuses the fcntl with EINVAL, which zc_create_sealed() turns
+ * into ENOTSUP rather than a ring that only looks sealed. */
+#ifndef MFD_ALLOW_SEALING
+#define MFD_ALLOW_SEALING 0x0002U
+#endif
+#ifndef F_ADD_SEALS
+#define F_ADD_SEALS 1033
+#define F_GET_SEALS 1034
+#endif
+#ifndef F_SEAL_SEAL
+#define F_SEAL_SEAL   0x0001
+#define F_SEAL_SHRINK 0x0002
+#define F_SEAL_GROW   0x0004
+#endif
+#ifndef F_SEAL_FUTURE_WRITE
+#define F_SEAL_FUTURE_WRITE 0x0010
 #endif
 
 /* Raw futex ops. Spelled out rather than pulled from <linux/futex.h> so this
@@ -223,6 +243,7 @@ static int zc_map(zc_ring_t *r, int fd, size_t map_size, uint32_t mode)
      * private word rather than a load from the shared control block. */
     r->notify    = (c->mode & ZC_MODE_F_NOTIFY) ? 1u : 0u;
     r->fd        = fd;
+    r->arena_fd  = -1;
     return 0;
 }
 
@@ -244,15 +265,22 @@ static int zc_open_backing(size_t map_size, int huge, int *fd_out, void **base_o
     return 0;
 }
 
-static int zc_create_mode(zc_ring_t *r, uint32_t slot_count, uint32_t slot_size,
-                          uint32_t mode)
-{
-    if (!r || slot_count < 2 || (slot_count & (slot_count - 1))) {
-        errno = EINVAL;
-        return -1;
-    }
-    memset(r, 0, sizeof(*r));
+/* Geometry and huge-page decision for a new ring. Shared by zc_create_mode()
+ * and zc_create_sealed() so that a sealed ring's virtual layout is the
+ * unsealed one byte for byte — the arena lands at the same arena_off whether
+ * it lives in the same memfd as the control block or in one of its own. */
+typedef struct {
+    long   pg;
+    size_t hpsz;
+    int    policy;
+    int    want_huge;
+    size_t slots_off;
+    size_t arena_off;
+    size_t map_size;
+} zc_geom_t;
 
+static int zc_geom(zc_geom_t *g, uint32_t slot_count, uint32_t slot_size)
+{
     long pg = sysconf(_SC_PAGESIZE);
     if (pg <= 0) pg = 4096;
 
@@ -281,27 +309,19 @@ static int zc_create_mode(zc_ring_t *r, uint32_t slot_count, uint32_t slot_size,
     size_t arena_off = zc_align_up(slots_off + slots_sz, align);
     size_t map_size  = zc_align_up(arena_off + arena_sz, align);
 
-    int   fd   = -1;
-    void *base = NULL;
-    if (want_huge && zc_open_backing(map_size, 1, &fd, &base) == 0) {
-        mode |= ZC_MODE_F_HUGETLB;
-    } else {
-        /* errno here is whatever the hugetlbfs attempt failed with — ENOMEM
-         * for an empty pool, EINVAL/ENOSYS for a kernel without it. Returning
-         * before it can be overwritten is what makes REQUIRE diagnosable. */
-        if (want_huge && policy == ZC_HUGE_REQUIRE) return -1;
-        if (zc_open_backing(map_size, 0, &fd, &base) != 0) return -1;
-        /* Second choice: keep the huge-aligned layout and ask for THP over
-         * the arena. Recorded only if the kernel accepts the advice, so a
-         * build without CONFIG_TRANSPARENT_HUGEPAGE reports 4k rather than
-         * claiming a THP it never got. Acceptance still is not proof the
-         * pages are huge — see zc_backing(). */
-        if (want_huge &&
-            madvise((uint8_t *)base + arena_off, map_size - arena_off,
-                    MADV_HUGEPAGE) == 0)
-            mode |= ZC_MODE_F_HUGEALIGN;
-    }
+    g->pg        = pg;
+    g->hpsz      = hpsz;
+    g->policy    = policy;
+    g->want_huge = want_huge;
+    g->slots_off = slots_off;
+    g->arena_off = arena_off;
+    g->map_size  = map_size;
+    return 0;
+}
 
+static void zc_init_ctrl(void *base, const zc_geom_t *g, uint32_t slot_count,
+                         uint32_t slot_size, uint32_t mode)
+{
     zc_ctrl_t *c = (zc_ctrl_t *)base;
     memset(c, 0, sizeof(*c));
     c->magic      = ZC_MAGIC;
@@ -309,9 +329,9 @@ static int zc_create_mode(zc_ring_t *r, uint32_t slot_count, uint32_t slot_size,
     c->mode       = mode;
     c->slot_count = slot_count;
     c->slot_size  = slot_size;
-    c->slots_off  = slots_off;
-    c->arena_off  = arena_off;
-    c->map_size   = map_size;
+    c->slots_off  = g->slots_off;
+    c->arena_off  = g->arena_off;
+    c->map_size   = g->map_size;
     atomic_store_explicit(&c->head, 0, memory_order_relaxed);
     atomic_store_explicit(&c->tail, 0, memory_order_relaxed);
     atomic_store_explicit(&c->futex_word, 0, memory_order_relaxed);
@@ -338,16 +358,52 @@ static int zc_create_mode(zc_ring_t *r, uint32_t slot_count, uint32_t slot_size,
 
     /* Vyukov initialisation: slot i starts at seq i, meaning "empty and
      * awaiting the producer at position i". */
-    zc_slot_t *slots = (zc_slot_t *)((uint8_t *)base + slots_off);
+    zc_slot_t *slots = (zc_slot_t *)((uint8_t *)base + g->slots_off);
     for (uint32_t i = 0; i < slot_count; i++) {
         atomic_store_explicit(&slots[i].seq, (uint64_t)i, memory_order_relaxed);
         slots[i].len   = 0;
         slots[i].flags = 0;
     }
     atomic_thread_fence(memory_order_release);
+}
 
-    munmap(base, map_size);
-    if (zc_map(r, fd, map_size, mode) != 0) { close(fd); return -1; }
+static int zc_create_mode(zc_ring_t *r, uint32_t slot_count, uint32_t slot_size,
+                          uint32_t mode)
+{
+    if (!r || slot_count < 2 || (slot_count & (slot_count - 1))) {
+        errno = EINVAL;
+        return -1;
+    }
+    memset(r, 0, sizeof(*r));
+
+    zc_geom_t g;
+    if (zc_geom(&g, slot_count, slot_size) != 0) return -1;
+
+    int   fd   = -1;
+    void *base = NULL;
+    if (g.want_huge && zc_open_backing(g.map_size, 1, &fd, &base) == 0) {
+        mode |= ZC_MODE_F_HUGETLB;
+    } else {
+        /* errno here is whatever the hugetlbfs attempt failed with — ENOMEM
+         * for an empty pool, EINVAL/ENOSYS for a kernel without it. Returning
+         * before it can be overwritten is what makes REQUIRE diagnosable. */
+        if (g.want_huge && g.policy == ZC_HUGE_REQUIRE) return -1;
+        if (zc_open_backing(g.map_size, 0, &fd, &base) != 0) return -1;
+        /* Second choice: keep the huge-aligned layout and ask for THP over
+         * the arena. Recorded only if the kernel accepts the advice, so a
+         * build without CONFIG_TRANSPARENT_HUGEPAGE reports 4k rather than
+         * claiming a THP it never got. Acceptance still is not proof the
+         * pages are huge — see zc_backing(). */
+        if (g.want_huge &&
+            madvise((uint8_t *)base + g.arena_off, g.map_size - g.arena_off,
+                    MADV_HUGEPAGE) == 0)
+            mode |= ZC_MODE_F_HUGEALIGN;
+    }
+
+    zc_init_ctrl(base, &g, slot_count, slot_size, mode);
+
+    munmap(base, g.map_size);
+    if (zc_map(r, fd, g.map_size, mode) != 0) { close(fd); return -1; }
     return 0;
 }
 
@@ -396,6 +452,10 @@ int zc_attach(zc_ring_t *r, int fd)
      * a different ABI would misread every offset, so refuse rather than
      * produce garbage. */
     if (tmp.version != ZC_ABI_VERSION) { errno = EPROTO; return -1; }
+    /* A sealed ring's control memfd ends at arena_off. Mapping map_size of it
+     * would succeed and then SIGBUS on the first payload read — refuse here,
+     * where the caller can still be told why. */
+    if (tmp.mode & ZC_MODE_F_SEALED) { errno = EINVAL; return -1; }
     return zc_map(r, fd, (size_t)tmp.map_size, tmp.mode);
 }
 
@@ -404,10 +464,281 @@ void zc_close(zc_ring_t *r)
     if (!r || !r->base) return;
     munmap(r->base, r->map_size);
     if (r->fd >= 0) close(r->fd);
+    if (r->arena_fd >= 0) close(r->arena_fd);
     memset(r, 0, sizeof(*r));
 }
 
 int zc_fd(const zc_ring_t *r) { return r ? r->fd : -1; }
+
+/* ---- sealed rings (§14) ---- */
+
+/* Map the control file and the arena file back to back, reproducing the
+ * virtual layout of a single-file ring: control block and slot array at
+ * base, arena at base + arena_off. The fast path computes every address from
+ * r->ctrl, r->slots and r->arena exactly as before, so it cannot tell the
+ * difference — which is the point.
+ *
+ * Reserve-then-MAP_FIXED, as zc_mmap_aligned() does, and for one more reason
+ * here: the two halves must be contiguous, and two independent mmap(NULL)
+ * calls promise nothing about that. `align` is the page size, or the huge
+ * page size when the arena is huge-backed or huge-aligned (§11): arena_off is
+ * then a multiple of it, so aligning base aligns the arena too. */
+static void *zc_mmap_split(int fd, int arena_fd, size_t arena_off,
+                           size_t map_size, size_t align, int arena_prot)
+{
+    size_t reserve = map_size + align;
+    uint8_t *p = mmap(NULL, reserve, PROT_NONE,
+                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    if (p == MAP_FAILED) return MAP_FAILED;
+
+    uint8_t *base = (uint8_t *)zc_align_up((size_t)p, align);
+    if (mmap(base, arena_off, PROT_READ | PROT_WRITE,
+             MAP_SHARED | MAP_FIXED, fd, 0) == MAP_FAILED ||
+        mmap(base + arena_off, map_size - arena_off, arena_prot,
+             MAP_SHARED | MAP_FIXED, arena_fd, 0) == MAP_FAILED) {
+        int e = errno;
+        munmap(p, reserve);
+        errno = e;
+        return MAP_FAILED;
+    }
+
+    size_t head = (size_t)(base - p);
+    if (head) munmap(p, head);
+    if (reserve > head + map_size)
+        munmap(base + map_size, reserve - head - map_size);
+    return base;
+}
+
+/* zc_map()'s bookkeeping for a split mapping. Geometry comes from `g`, the
+ * caller's private copy, not from the shared control block: in Phase 1 a
+ * consumer can still write that block (§14), and the addresses this process
+ * dereferences must not be ones a peer chose. */
+static void zc_bind_split(zc_ring_t *r, void *base, int fd, int arena_fd,
+                          const zc_ctrl_t *g)
+{
+    r->base      = base;
+    r->map_size  = (size_t)g->map_size;
+    r->ctrl      = (zc_ctrl_t *)base;
+    r->slots     = (zc_slot_t *)((uint8_t *)base + g->slots_off);
+    r->arena     = (uint8_t *)base + g->arena_off;
+    r->mask      = g->slot_count - 1;
+    r->slot_size = g->slot_size;
+    r->notify    = (g->mode & ZC_MODE_F_NOTIFY) ? 1u : 0u;
+    r->fd        = fd;
+    r->arena_fd  = arena_fd;
+}
+
+/* Add seals and read them back. F_ADD_SEALS on a kernel that predates a seal
+ * fails with EINVAL, which is the right outcome; reading back is for the case
+ * where it does not fail and still did not apply. */
+static int zc_add_seals(int fd, int seals)
+{
+    if (fcntl(fd, F_ADD_SEALS, seals) != 0) return -1;
+    int got = fcntl(fd, F_GET_SEALS);
+    if (got < 0) return -1;
+    if ((got & seals) != seals) { errno = ENOTSUP; return -1; }
+    return 0;
+}
+
+/* One attempt at a sealed ring, with or without a hugetlbfs arena. Returns 0,
+ * -1 with errno set, or -2 if everything worked except that the kernel does
+ * not enforce F_SEAL_FUTURE_WRITE on hugetlbfs — the caller then retries on
+ * shmem, which is the backing the seal was introduced for. */
+static int zc_create_sealed_try(zc_ring_t *r, uint32_t slot_count,
+                                uint32_t slot_size, uint32_t mode,
+                                const zc_geom_t *g, int allow_hugetlb)
+{
+    const size_t arena_len = g->map_size - g->arena_off;
+    int   fd = -1, afd = -1, rc = -1, e;
+    void *base = MAP_FAILED;
+
+    /* The control block and slot array stay ordinary shared memory: every
+     * consumer writes its cursor there, and in notify mode the waiter count
+     * (§9). Sealed only against resizing, so a consumer cannot truncate the
+     * ring out from under everyone and SIGBUS the producer. */
+    fd = zc_memfd("zcring", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+    if (fd < 0) return -1;
+    if (ftruncate(fd, (off_t)g->arena_off) != 0) goto out;
+
+    if (g->want_huge && allow_hugetlb) {
+        afd = zc_memfd("zcring-arena",
+                       MFD_CLOEXEC | MFD_ALLOW_SEALING | MFD_HUGETLB);
+        /* As in zc_open_backing(): an empty pool is reported by mmap, not by
+         * memfd_create or ftruncate, so the mapping is part of the attempt. */
+        if (afd >= 0 && ftruncate(afd, (off_t)arena_len) == 0)
+            base = zc_mmap_split(fd, afd, g->arena_off, g->map_size, g->hpsz,
+                                 PROT_READ | PROT_WRITE);
+        if (base != MAP_FAILED) {
+            mode |= ZC_MODE_F_HUGETLB;
+        } else {
+            e = errno;
+            if (afd >= 0) close(afd);
+            afd = -1;
+            errno = e;
+            if (g->policy == ZC_HUGE_REQUIRE) goto out;
+        }
+    }
+    if (base == MAP_FAILED) {
+        afd = zc_memfd("zcring-arena", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+        if (afd < 0 || ftruncate(afd, (off_t)arena_len) != 0) goto out;
+        base = zc_mmap_split(fd, afd, g->arena_off, g->map_size,
+                             g->want_huge ? g->hpsz : (size_t)g->pg,
+                             PROT_READ | PROT_WRITE);
+        if (base == MAP_FAILED) goto out;
+        /* §11's second choice, unchanged. */
+        if (g->want_huge &&
+            madvise((uint8_t *)base + g->arena_off, arena_len,
+                    MADV_HUGEPAGE) == 0)
+            mode |= ZC_MODE_F_HUGEALIGN;
+    }
+
+    zc_init_ctrl(base, g, slot_count, slot_size, mode | ZC_MODE_F_SEALED);
+
+    /* The seal. Applied after this process has its writable mapping, which
+     * F_SEAL_FUTURE_WRITE leaves alone; from here on the kernel refuses every
+     * new writable shared mapping of the arena, refuses mprotect() up to write
+     * on a read-only one (it clears VM_MAYWRITE), and refuses write(2) and
+     * hole punching. F_SEAL_SEAL last, so nobody can add F_SEAL_WRITE later
+     * and freeze the producer, nor seal the control file against new
+     * consumers. */
+    if (zc_add_seals(afd, F_SEAL_FUTURE_WRITE | F_SEAL_SHRINK | F_SEAL_GROW |
+                          F_SEAL_SEAL) != 0 ||
+        zc_add_seals(fd, F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_SEAL) != 0) {
+        if (errno == EINVAL) errno = ENOTSUP;   /* kernel < 5.1 */
+        goto out;
+    }
+
+    /* Then check that the kernel means it, by doing what an attacker would.
+     * Only EPERM counts as proof: any other failure (ENOMEM from a hugetlbfs
+     * pool, say) would not show the seal refused anything. Shipping a ring
+     * labelled sealed whose arena is not is the one outcome worse than
+     * failing, so this fails closed. */
+    void *probe = mmap(NULL, arena_len, PROT_READ | PROT_WRITE, MAP_SHARED,
+                       afd, 0);
+    if (probe != MAP_FAILED || errno != EPERM) {
+        if (probe != MAP_FAILED) munmap(probe, arena_len);
+        rc = (mode & ZC_MODE_F_HUGETLB) ? -2 : -1;
+        errno = ENOTSUP;
+        goto out;
+    }
+
+    {
+        zc_ctrl_t geom = *(zc_ctrl_t *)base;
+        zc_bind_split(r, base, fd, afd, &geom);
+    }
+    return 0;
+
+out:
+    e = errno;
+    if (base != MAP_FAILED) munmap(base, g->map_size);
+    if (afd >= 0) close(afd);
+    if (fd >= 0) close(fd);
+    errno = e;
+    return rc;
+}
+
+int zc_create_sealed(zc_ring_t *r, uint32_t slot_count, uint32_t slot_size,
+                     uint32_t mode)
+{
+    if (!r || slot_count < 2 || (slot_count & (slot_count - 1)) ||
+        (mode & ~(ZC_MODE_MASK | ZC_MODE_F_NOTIFY)) ||
+        (mode & ZC_MODE_MASK) > ZC_MODE_BROADCAST) {
+        errno = EINVAL;
+        return -1;
+    }
+    memset(r, 0, sizeof(*r));
+    r->fd = r->arena_fd = -1;
+
+    zc_geom_t g;
+    if (zc_geom(&g, slot_count, slot_size) != 0) return -1;
+
+    int rc = zc_create_sealed_try(r, slot_count, slot_size, mode, &g, 1);
+    if (rc == -2 && g.policy != ZC_HUGE_REQUIRE)
+        rc = zc_create_sealed_try(r, slot_count, slot_size, mode, &g, 0);
+    return rc == 0 ? 0 : -1;
+}
+
+int zc_attach_sealed(zc_ring_t *r, int fd, int arena_fd)
+{
+    if (!r || fd < 0 || arena_fd < 0) { errno = EINVAL; return -1; }
+    memset(r, 0, sizeof(*r));
+    r->fd = r->arena_fd = -1;
+
+    /* Same peek as zc_attach(), and the copy is what the mapping is built
+     * from — see zc_bind_split(). */
+    zc_ctrl_t g;
+    ssize_t got = pread(fd, &g, sizeof g, 0);
+    if (got < 0) return -1;
+    if ((size_t)got != sizeof g || g.magic != ZC_MAGIC) { errno = EINVAL; return -1; }
+    if (g.version != ZC_ABI_VERSION) { errno = EPROTO; return -1; }
+    if (!(g.mode & ZC_MODE_F_SEALED)) { errno = EINVAL; return -1; }
+
+    /* An arena fd without the seal is not one this ring handed out, and
+     * mapping it would give this process a view nobody else is protected
+     * from. Not an attack on anyone but the caller — refused anyway, because
+     * the caller asked for a sealed ring and should not silently get less. */
+    int seals = fcntl(arena_fd, F_GET_SEALS);
+    if (seals < 0 || !(seals & F_SEAL_FUTURE_WRITE)) { errno = EINVAL; return -1; }
+
+    /* Geometry sanity, so that a mismatched pair of fds fails here with an
+     * errno rather than later with SIGBUS. */
+    struct stat sc, sa;
+    if (fstat(fd, &sc) != 0 || fstat(arena_fd, &sa) != 0) return -1;
+    if (g.slot_count < 2 || (g.slot_count & (g.slot_count - 1)) ||
+        g.arena_off > g.map_size ||
+        g.slots_off + (uint64_t)g.slot_count * sizeof(zc_slot_t) > g.arena_off ||
+        (uint64_t)g.slot_count * g.slot_size > g.map_size - g.arena_off ||
+        (uint64_t)sc.st_size < g.arena_off ||
+        (uint64_t)sa.st_size < g.map_size - g.arena_off) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    long pg = sysconf(_SC_PAGESIZE);
+    size_t align = pg > 0 ? (size_t)pg : 4096;
+    if ((g.mode & (ZC_MODE_F_HUGETLB | ZC_MODE_F_HUGEALIGN)) &&
+        zc_hugepage_size() > align)
+        align = zc_hugepage_size();
+
+    void *base = zc_mmap_split(fd, arena_fd, (size_t)g.arena_off,
+                               (size_t)g.map_size, align, PROT_READ);
+    if (base == MAP_FAILED) return -1;
+    if (g.mode & ZC_MODE_F_HUGEALIGN)
+        (void)madvise((uint8_t *)base + g.arena_off,
+                      (size_t)(g.map_size - g.arena_off), MADV_HUGEPAGE);
+
+    zc_bind_split(r, base, fd, arena_fd, &g);
+    return 0;
+}
+
+int zc_arena_fd(const zc_ring_t *r)
+{
+    return (r && r->ctrl && (r->ctrl->mode & ZC_MODE_F_SEALED)) ? r->arena_fd
+                                                                : -1;
+}
+
+int zc_drop_write(zc_ring_t *r)
+{
+    if (!r || !r->ctrl || r->arena_fd < 0 ||
+        !(r->ctrl->mode & ZC_MODE_F_SEALED)) {
+        errno = EINVAL;
+        return -1;
+    }
+    /* Offsets from this process's own pointers, not from the shared block. */
+    size_t off = (size_t)(r->arena - (uint8_t *)r->base);
+    size_t len = r->map_size - off;
+
+    /* MAP_FIXED over the inherited writable mapping replaces it in one step:
+     * there is no instant at which the range is unmapped and another thread's
+     * mmap could land there. The new mapping is made through the sealed fd,
+     * so it has no VM_MAYWRITE and mprotect() cannot bring write back. */
+    void *p = mmap(r->arena, len, PROT_READ, MAP_SHARED | MAP_FIXED,
+                   r->arena_fd, 0);
+    if (p == MAP_FAILED) return -1;
+    if (r->ctrl->mode & ZC_MODE_F_HUGEALIGN)
+        (void)madvise(r->arena, len, MADV_HUGEPAGE);
+    return 0;
+}
 
 /* ---- broadcast registration ---- */
 
