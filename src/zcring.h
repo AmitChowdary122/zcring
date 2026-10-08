@@ -998,6 +998,12 @@ enum { ZC_MODE_UNICAST = 0, ZC_MODE_BROADCAST = 1 };
 #define ZC_MODE_F_HUGETLB   0x00000200u
 #define ZC_MODE_F_HUGEALIGN 0x00000400u
 
+/* Sealed ring — see §14. The arena lives in a memfd of its own, sealed
+ * F_SEAL_FUTURE_WRITE once the creator has mapped it, so every later mapping
+ * of it is read-only and the kernel refuses to make it otherwise. Same spare
+ * high bits again; the shared layout and ZC_ABI_VERSION are unchanged. */
+#define ZC_MODE_F_SEALED    0x00000800u
+
 /* Set in zc_slot_t.flags on a slot published by zc_producer_reap() on behalf
  * of a producer that died holding it (§13). len is 0 on such a slot, but a
  * zero-length message is something an application may legitimately send, so
@@ -1220,6 +1226,10 @@ typedef struct {
     void      *base;
     size_t     map_size;
     int        fd;
+    /* The sealed arena's memfd (§14), or -1. Sits in what was fd's tail
+     * padding, so sizeof(zc_ring_t) and every offset the inlined fast path
+     * uses are unchanged. */
+    int        arena_fd;
 } zc_ring_t;
 
 /* ---- adaptive waiter: the learned policy of §5-§8 ----
@@ -1288,9 +1298,38 @@ int  zc_create_bcast(zc_ring_t *r, uint32_t slot_count, uint32_t slot_size);
 int  zc_create_notify(zc_ring_t *r, uint32_t slot_count, uint32_t slot_size);
 int  zc_create_bcast_notify(zc_ring_t *r, uint32_t slot_count, uint32_t slot_size);
 
+/* Refuses a sealed ring with EINVAL: its control fd alone does not contain
+ * the arena. Use zc_attach_sealed(). */
 int  zc_attach(zc_ring_t *r, int fd);
 void zc_close(zc_ring_t *r);
 int  zc_fd(const zc_ring_t *r);
+
+/* ---- sealed rings: a read-only arena for every consumer (§14) ----
+ *
+ * mode is ZC_MODE_UNICAST or ZC_MODE_BROADCAST, optionally | ZC_MODE_F_NOTIFY.
+ * The creator's mapping is the only writable view of the arena that will
+ * ever exist; any process that attaches through the fds gets a read-only one
+ * and the kernel will not upgrade it. Fails with ENOTSUP rather than handing
+ * back an unprotected ring on a kernel without F_SEAL_FUTURE_WRITE (< 5.1).
+ *
+ * The fast path is untouched: a sealed ring runs exactly the reserve/commit/
+ * acquire/release code an unsealed one does. */
+int  zc_create_sealed(zc_ring_t *r, uint32_t slot_count, uint32_t slot_size,
+                      uint32_t mode);
+
+/* Attach as a consumer. Both fds become the ring's on success (zc_close closes
+ * them) and remain the caller's on failure. Refuses an arena fd that is not
+ * sealed, or a ring that was not created sealed, with EINVAL. */
+int  zc_attach_sealed(zc_ring_t *r, int fd, int arena_fd);
+
+/* The arena memfd to hand a consumer alongside zc_fd(), or -1 if unsealed. */
+int  zc_arena_fd(const zc_ring_t *r);
+
+/* For a consumer that was fork()ed from the creator and so inherited its
+ * writable mapping, which no seal can reach: replace it with a read-only one
+ * that can never be made writable again. Call before running anything that is
+ * not trusted with the producer's data. EINVAL on an unsealed ring. */
+int  zc_drop_write(zc_ring_t *r);
 
 /* ---- huge-page backing for the arena (§11) ----
  *
