@@ -4,7 +4,7 @@
  * Layer 2: broadcast fan-out — one producer, N consumers, every consumer sees
  *          every message, still with zero copies for all of them.
  * Layer 3: sealed rings (Phase 1, §14) — the kernel maps the arena read-only
- *          for every consumer, so no consumer can corrupt what others read.
+ *          for every consumer, so no consumer can write a byte of any message.
  *
  * The defining property: reserve()/acquire() hand back raw pointers INTO the
  * shared mapping. The caller constructs and reads messages in place. There is
@@ -982,11 +982,30 @@
  * (join, leave, reap — §3), the waiter count in notify mode (§9), slot seq on
  * unicast release, and §13's recovery path. So that file is sealed only
  * against resizing, which stops a consumer truncating the ring out from under
- * everyone. It remains writable, and a hostile consumer can still stall the
- * ring, make others skip or repeat messages, or report a false length. What it
- * can no longer do is change one byte of any message. zc_attach_sealed() takes
- * the geometry it maps from a private copy, so the addresses a consumer
- * dereferences are never ones a peer wrote.
+ * everyone. It remains writable, and that is the precise limit of Phase 1. A
+ * hostile consumer cannot write a single byte of any message. But through the
+ * bookkeeping it can still write — slot seq, cursors, lengths — it can make an
+ * honest consumer see a stale, half-written, repeated, skipped or over-long
+ * message, or stall the ring. "Cannot change message content" would overstate
+ * it: the bytes are the producer's, but which bytes a consumer is pointed at,
+ * when, and how many it is told there are, are not protected.
+ *
+ * Over-long needs the receiver's cooperation to be harmless. slots[].len lives
+ * in the control memfd and zc_acquire() / zc_bcast_acquire() return it as
+ * stored, so a peer can make a 4 KiB slot report a 2 GiB message (verified). A
+ * receiver that trusts len reads past its slot — into its neighbours, then off
+ * the end of the arena into SIGSEGV — or overflows its own buffer if it copies
+ * the message out. On a ring with an untrusted consumer, receivers clamp it:
+ *
+ *     if (len > r->slot_size) len = r->slot_size;   (or drop the message)
+ *
+ * r->slot_size is the private copy, so a peer cannot move that bound. The
+ * library does not clamp for the caller because that is a compare on the
+ * consumer fast path, which this section deliberately leaves
+ * instruction-identical (below); it is deferred, not overlooked.
+ * zc_attach_sealed() takes the geometry it maps from a private copy, so the
+ * base addresses and slot stride a consumer dereferences are never ones a
+ * peer wrote; len is the one size that is.
  *
  * Phase 2 (LAYER3_DESIGN.md §4) closes the control block, and that is where
  * the topology argument lives. A broadcast consumer writes nothing shared
@@ -1001,7 +1020,13 @@
  *   consumer rewrites payload bytes ............. closed, by the seal
  *   consumer truncates or hole-punches the arena  closed, by the seal
  *   consumer resizes the control file ........... closed, SHRINK|GROW
- *   consumer corrupts the control block ......... OPEN — Phase 2
+ *   consumer corrupts the control block ......... OPEN — Phase 2. It cannot
+ *       write a message byte, but it can make an honest consumer see a stale,
+ *       half-written, repeated, skipped or over-long message, or stall the
+ *       ring.
+ *   consumer writes a false slots[].len ......... OPEN in the library; closed
+ *       by a receiver that clamps len to r->slot_size (above). A receiver
+ *       that trusts it reads past its slot or overflows its own buffer.
  *   consumer forked from the producer ........... inherits the producer's
  *       writable mapping, which no seal reaches. zc_drop_write() replaces it
  *       with one that can never be made writable; until a forked consumer
@@ -1030,7 +1055,7 @@
  * mapping a consumer already has, read-only or not, so it cannot evict. Per-
  * role grants at any time, and revocation by zapping a peer's page tables, are
  * what a /dev/zcring module would be for. Neither is needed to stop a consumer
- * corrupting the data, which is the property this section exists to provide.
+ * writing the data, which is the property this section exists to provide.
  *
  * ---------------------------------------------------------------------------
  * Limits, and what did not change
@@ -1614,7 +1639,9 @@ static inline void zc_commit(zc_ring_t *r, uint64_t pos, uint32_t len)
 }
 
 /* Claim a filled slot. Returns a pointer into shared memory for in-place
- * reading, or NULL if the ring is empty. */
+ * reading, or NULL if the ring is empty. *len_out is read from the shared
+ * slot as stored: with an untrusted peer attached, clamp it to r->slot_size
+ * before trusting it (§14). */
 static inline void *zc_acquire(zc_ring_t *r, uint64_t *pos_out, uint32_t *len_out)
 {
     zc_ctrl_t *c = r->ctrl;
@@ -1764,7 +1791,9 @@ static inline void zc_bcast_commit(zc_ring_t *r, uint64_t pos, uint32_t len)
 
 /* Read the next message for consumer `id`, or NULL if the producer has not
  * published it yet. No atomic RMW and no shared-line write: consumer k touches
- * only its own cursor line and the payload, so N consumers do not contend. */
+ * only its own cursor line and the payload, so N consumers do not contend.
+ * *len_out is read from the shared slot as stored: with an untrusted peer
+ * attached, clamp it to r->slot_size before trusting it (§14). */
 static inline void *zc_bcast_acquire(zc_ring_t *r, int id,
                                      uint64_t *pos_out, uint32_t *len_out)
 {

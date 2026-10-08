@@ -14,8 +14,8 @@ three of four** — adaptive notification, broadcast fan-out, and crash
 recovery for both dead consumers *and* dead producers are done; the
 `eventfd`/`epoll` bridge is not. **Layer 3 Phase 1 is built**: sealed rings,
 where the kernel maps the payload arena read-only for every consumer, so a
-hostile consumer cannot corrupt what the others read (below, and
-`make attack-demo`). Phases 2–3 of [`docs/LAYER3_DESIGN.md`](docs/LAYER3_DESIGN.md)
+hostile consumer cannot write a single byte of what the others read (below,
+and `make attack-demo`). Phases 2–3 of [`docs/LAYER3_DESIGN.md`](docs/LAYER3_DESIGN.md)
 — control-block isolation and eviction — are not built. Layer 4 is untouched.
 
 ```
@@ -186,7 +186,7 @@ replay above is reproducible from the committed CSVs; anyone can check it.
 Note the replay is *conservative* toward the learner: it scores the recorded
 budget and ignores ε-greedy exploration, so the real CPU cost is higher still.
 
-## Layer 3 — sealed rings: a consumer that cannot corrupt the data
+## Layer 3 — sealed rings: a consumer that cannot write the data
 
 Every userspace zero-copy framework, iceoryx included and zcring until this
 layer, has every participant map the shared segment read-write. One buggy or
@@ -249,7 +249,8 @@ runs each, and the sealed one in 10/10 runs as a non-root user.)
 | Consumer rewrites message payloads | **closed** — the seal |
 | Consumer truncates or hole-punches the arena | **closed** — the seal |
 | Consumer resizes the control file | **closed** — `F_SEAL_SHRINK`/`GROW` |
-| Consumer corrupts the control block (cursors, slot seq, lengths) | **open** — it can stall the ring or make others skip or repeat messages, but not change one byte of any message. Phase 2. |
+| Consumer corrupts the control block (cursors, slot seq, lengths) | **open** — it cannot write a single byte of any message, but it can make an honest consumer see a stale, half-written, repeated, skipped or over-long message, or stall the ring. Phase 2. |
+| Consumer writes a false `slots[].len` | **open in the library, closed by the receiver.** `len` lives in the writable control block and `zc_acquire()`/`zc_bcast_acquire()` return it unclamped, so a peer can make a 4 KiB slot report a 2 GiB message (verified). A receiver that trusts it reads past its slot (crash) or overflows its own buffer. Receivers clamp `len` to `r->slot_size`, which is a private copy; the demo's consumer never trusts `len`. A clamp inside the library would change the consumer fast path, so it is deferred. |
 | Consumer `fork()`ed from the producer | holds the producer's writable mapping until it calls `zc_drop_write()`; exec'd consumers never hold one |
 | Same-user process writing through the producer's own mapping via `/proc/<pid>/mem` | closed only if consumers run as another user **or** the producer is non-dumpable (`prctl(PR_SET_DUMPABLE, 0)`, as the demo does). With the producer left dumpable this attack was verified to land. |
 | root / `CAP_SYS_PTRACE` | out of scope |
@@ -268,7 +269,7 @@ write access again, and it cannot take a mapping away from a consumer that
 is already attached. Granting write access per role at any time, and evicting
 a live consumer, are what the `/dev/zcring` module in
 [`docs/LAYER3_DESIGN.md`](docs/LAYER3_DESIGN.md) is for. Neither is needed to
-stop a consumer corrupting the data.
+stop a consumer writing the data.
 
 ## Benchmark methodology, and the trap in it
 
@@ -847,14 +848,16 @@ via `zc_bcast_reap()`, adaptive spin-then-futex notification with an
 online-learned spin budget (above), and Layer 3 Phase 1, sealed rings (above).
 
 - **Layer 3 is Phase 1 only.** The arena is protected; the control block is
-  still writable by every consumer, which can stall or confuse the ring but
-  not change a message (Phase 2). Nothing can evict a live consumer, and a
-  sealed arena can never be mapped writable again, so a replacement producer
-  after a crash must already hold the mapping (Phase 3, or the module — see
-  `docs/LAYER3_DESIGN.md`). Sealed rings need Linux ≥ 5.1. Verified on Linux
-  6.18 / x86_64; the hugetlbfs arena path is guarded by the creation-time
-  self-check but was not exercised, because the hugetlb pool on the test
-  machine was empty.
+  still writable by every consumer. Through it a consumer cannot write a
+  message byte, but it can make an honest consumer see a stale, half-written,
+  repeated, skipped or over-long message, or stall the ring (Phase 2). Until
+  the library clamps `len`, receivers clamp it to `slot_size` themselves.
+  Nothing can evict a live consumer, and a sealed arena can never be mapped
+  writable again, so a replacement producer after a crash must already hold
+  the mapping (Phase 3, or the module — see `docs/LAYER3_DESIGN.md`). Sealed
+  rings need Linux ≥ 5.1. Verified on Linux 6.18 / x86_64; the hugetlbfs arena
+  path is guarded by the creation-time self-check but was not exercised,
+  because the hugetlb pool on the test machine was empty.
 
 - **The measurement machine failed and was recovered.** The i3-1115G4 died on
   14 Aug (drive fault) and was revived on 20 Aug; the canonical datasets were
